@@ -26,7 +26,7 @@ class CleanupWorker:
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
-    def stop(self, join=True):
+    def stop(self, join: bool = False, timeout: float = None):
         self._stop_event.set()
         if join and self._thread:
-            self._thread.join()
+            self._thread.join(timeout)
