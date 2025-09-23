@@ -3,19 +3,19 @@ import customtkinter as ctk
 from ui.icons import COLORS, FONTS, ICONS
 
 class CaptureButton(ctk.CTkButton):
-    """Botão de captura estilizado"""
+    """Botão de captura compacto para 800x400"""
     
-    def __init__(self, master, command=None, *args, **kwargs):
-        # Ícone da câmera
+    def __init__(self, master, command=None, width=140, height=45, *args, **kwargs):
+        # Ícone da câmera menor
         camera_icon = ICONS["camera"]()
         
         super().__init__(
             master,
             text=" Capturar" if camera_icon else "Capturar",
             image=camera_icon,
-            width=200,
-            height=52,
-            corner_radius=26,
+            width=width,      # Usar o parâmetro width
+            height=height,    # Usar o parâmetro height
+            corner_radius=20,
             fg_color=COLORS["accent"],
             hover_color=COLORS["accent_hover"],
             text_color="#ffffff",
@@ -24,7 +24,6 @@ class CaptureButton(ctk.CTkButton):
             *args, **kwargs
         )
         
-        # Efeito de sombra (simulado com borda)
         self.configure(border_width=0)
 
     def disable(self):

@@ -22,18 +22,19 @@ COLORS = {
     "warning": "#ffa502",
 }
 
+# Fontes menores para caber na tela 800x400
 FONTS = {
-    "title": ("Inter", 20, "bold"),
-    "subtitle": ("Inter", 16, "bold"),
-    "menu": ("Inter", 14, "bold"),
-    "body": ("Inter", 13),
-    "pill": ("Inter", 12, "bold"),
-    "small": ("Inter", 11),
+    "title": ("Inter", 16, "bold"),      # Reduzido de 20
+    "subtitle": ("Inter", 14, "bold"),   # Reduzido de 16
+    "menu": ("Inter", 12, "bold"),       # Reduzido de 14
+    "body": ("Inter", 11),               # Reduzido de 13
+    "pill": ("Inter", 10, "bold"),       # Reduzido de 12
+    "small": ("Inter", 9),               # Reduzido de 11
 }
 
-WINDOW_PADDING = 15
-SIDEBAR_WIDTH = 260
-CAPTURE_BTN_SIZE = (200, 52)
+WINDOW_PADDING = 8                       # Reduzido de 15
+SIDEBAR_WIDTH = 180                      # Reduzido de 260
+CAPTURE_BTN_SIZE = (160, 40)             # Reduzido de 200x52
 
 # Cache de ícones
 _icon_cache = {}
@@ -55,7 +56,7 @@ def resource_path(rel_path: str) -> str:
     print(f"⚠️ Arquivo não encontrado: {rel_path}")
     return rel_path
 
-def load_icon(path: str, size: Tuple[int, int] = (24, 24)) -> Optional[ctk.CTkImage]:
+def load_icon(path: str, size: Tuple[int, int] = (20, 20)) -> Optional[ctk.CTkImage]:  # Ícones menores
     """Carrega ícone como CTkImage com cache"""
     cache_key = f"{path}_{size[0]}x{size[1]}"
     
@@ -89,13 +90,13 @@ def load_icon(path: str, size: Tuple[int, int] = (24, 24)) -> Optional[ctk.CTkIm
         ctk_image = ctk.CTkImage(light_image=image, dark_image=image, size=size)
         return ctk_image
 
-# Ícones pré-carregados
+# Ícones pré-carregados com tamanhos menores
 ICONS = {
-    "strawberry": lambda size=(32, 32): load_icon("strawberry.png", size),
-    "camera": lambda size=(20, 20): load_icon("camera.png", size),
-    "gallery": lambda size=(20, 20): load_icon("gallery.png", size),
-    "maps": lambda size=(20, 20): load_icon("maps.png", size),
-    "setting": lambda size=(20, 20): load_icon("setting.png", size),
-    "battery": lambda size=(20, 16): load_icon("battery.png", size),
-    "home": lambda size=(20, 20): load_icon("home.png", size) or load_icon("strawberry.png", size),
+    "strawberry": lambda size=(28, 28): load_icon("strawberry.png", size),  # Reduzido
+    "camera": lambda size=(16, 16): load_icon("camera.png", size),          # Reduzido
+    "gallery": lambda size=(16, 16): load_icon("gallery.png", size),        # Reduzido
+    "maps": lambda size=(16, 16): load_icon("maps.png", size),              # Reduzido
+    "setting": lambda size=(16, 16): load_icon("setting.png", size),        # Reduzido
+    "battery": lambda size=(16, 12): load_icon("battery.png", size),        # Reduzido
+    "home": lambda size=(16, 16): load_icon("home.png", size) or load_icon("strawberry.png", size),
 }

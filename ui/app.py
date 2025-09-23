@@ -3,11 +3,13 @@ import threading
 import os
 import time
 import json
+import socket
 from datetime import datetime
 import customtkinter as ctk
 from typing import Dict, Any, Optional, Callable
 from PIL import Image, ImageTk
 
+# Importar das classes core existentes
 from core.network import TCPClient, UDPClient
 from core.video_stream import VideoStreamHandler
 from core.commands import CommandHandler
@@ -19,21 +21,25 @@ from ui.screens.gallery_screen import GalleryScreen
 from ui.screens.map_screen import MapScreen
 from ui.screens.settings_screen import SettingsScreen
 
-CAPTURES_DIR = "captures"
+CAPTURES_DIR = "/"
 
 class FrontendApp(ctk.CTk):
     """
-    Controlador principal da UI - integra backend (rede, vídeo) com frontend modular
+    Controlador principal da UI - otimizado para 800x400
     """
     
     def __init__(self, config: Dict[str, Any]):
         super().__init__()
         self.title("Detector de Pragas em Morango - TCC")
         
-        # Configuração de fullscreen correta
+        # Configuração específica para 800x400
+        self.geometry("800x400")
         self.attributes("-fullscreen", True)
-        self.geometry(f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}")
+        self.resizable(False, False)
         self.configure(fg_color=COLORS["bg"])
+        
+        self.minsize(800, 400)
+        self.maxsize(800, 400)
         
         self.config = config
         self.running = True
@@ -55,19 +61,19 @@ class FrontendApp(ctk.CTk):
         os.makedirs(CAPTURES_DIR, exist_ok=True)
 
     def _setup_backend(self):
-        """Configura clientes de rede e handlers"""
+        """Configura clientes de rede e handlers usando as classes core"""
         server = self.config.get("server", {})
         udp = self.config.get("udp", {})
         
-        # Network clients
+        # Network clients (usando suas classes core)
         self.tcp_client = TCPClient(server.get("host"), server.get("port"))
         self.udp_client = UDPClient(udp.get("host"), udp.get("port"))
         self.udp_sock = self.udp_client.bind()
         
-        # Video stream
+        # Video stream (usando sua classe core)
         self.video_stream = VideoStreamHandler(self.udp_sock, self._on_frame_received)
         
-        # Command handler
+        # Command handler (usando sua classe core)
         self.commands = CommandHandler(self.tcp_client, udp.get("port"))
         
         # Cleanup worker
@@ -90,7 +96,7 @@ class FrontendApp(ctk.CTk):
         self.sidebar.grid(row=0, column=0, sticky="ns")
         
         # Área de conteúdo principal
-        self.content = ctk.CTkFrame(self, fg_color=COLORS["panel"], corner_radius=16)
+        self.content = ctk.CTkFrame(self, fg_color=COLORS["panel"], corner_radius=12)
         self.content.grid(row=0, column=1, sticky="nsew", padx=WINDOW_PADDING, pady=WINDOW_PADDING)
         self.content.grid_rowconfigure(0, weight=1)
         self.content.grid_columnconfigure(0, weight=1)
@@ -106,14 +112,20 @@ class FrontendApp(ctk.CTk):
         
         # Gallery screen
         gallery_screen = GalleryScreen(self.content, captures_dir=CAPTURES_DIR)
+        if hasattr(gallery_screen, 'back_btn'):
+            gallery_screen.back_btn.configure(command=self._on_home)
         self._register_screen("gallery", gallery_screen)
         
         # Map screen
         map_screen = MapScreen(self.content)
+        if hasattr(map_screen, 'back_btn'):
+            map_screen.back_btn.configure(command=self._on_home)
         self._register_screen("map", map_screen)
         
         # Settings screen
         settings_screen = SettingsScreen(self.content, on_save=self._on_settings_save)
+        if hasattr(settings_screen, 'back_btn'):
+            settings_screen.back_btn.configure(command=self._on_home)
         self._register_screen("settings", settings_screen)
         
         # Mostrar tela inicial
@@ -138,7 +150,7 @@ class FrontendApp(ctk.CTk):
         # Conectar TCP e registrar UDP
         threading.Thread(target=self._tcp_connect_and_register, daemon=True).start()
         
-        # Loop de recebimento de vídeo
+        # Loop de recebimento de vídeo (usando sua classe core)
         threading.Thread(
             target=self.video_stream.receive_loop, 
             args=(lambda: self.running,), 
@@ -243,19 +255,9 @@ class FrontendApp(ctk.CTk):
                 if hasattr(home_screen, 'get_current_frame'):
                     frame = home_screen.get_current_frame()
                     if frame:
-                        # Salvar imagem
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        filename = f"capture_{timestamp}.jpg"
-                        filepath = os.path.join(CAPTURES_DIR, filename)
-                        
-                        frame.save(filepath, "JPEG")
-                        self.current_capture_filename = filename
-                        
-                        print(f"📸 Imagem salva: {filename}")
-                        
                         # Enviar comando de captura para backend
                         if hasattr(self.commands, 'send_capture'):
-                            self.commands.send_capture(filename)
+                            self.commands.send_capture()  # Agora passa o filename
                         
                     else:
                         print("❌ Nenhum frame disponível")
@@ -339,15 +341,13 @@ class FrontendApp(ctk.CTk):
         self.after(0, show_video_ui)
 
     def _on_frame_received(self, frame_rgb):
-        """Callback quando novo frame é recebido"""
+        """Callback quando novo frame é recebido (da classe core VideoStreamHandler)"""
         try:
             from PIL import Image
             import numpy as np
             
             if isinstance(frame_rgb, np.ndarray):
                 pil_image = Image.fromarray(frame_rgb)
-            elif hasattr(frame_rgb, 'size') and hasattr(frame_rgb, 'mode'):
-                pil_image = frame_rgb
             else:
                 return
                 
@@ -365,6 +365,7 @@ class FrontendApp(ctk.CTk):
             pass
             
         try:
+            # Parar video stream se existir método stop
             if hasattr(self.video_stream, 'stop'):
                 self.video_stream.stop()
         except Exception:
