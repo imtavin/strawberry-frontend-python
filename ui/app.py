@@ -1,4 +1,3 @@
-# ui/app.py
 import threading
 import os
 import time
@@ -21,24 +20,29 @@ from ui.screens.gallery_screen import GalleryScreen
 from ui.screens.map_screen import MapScreen
 from ui.screens.settings_screen import SettingsScreen
 
+# Importar loggers
+from utils.logger import ui_logger, network_logger, video_logger, command_logger
+
 CAPTURES_DIR = "/"
 
 class FrontendApp(ctk.CTk):
     """
-    Controlador principal da UI - otimizado para 800x400
+    Controlador principal da UI - otimizado para 800x480
     """
     def __init__(self, config: Dict[str, Any]):
         super().__init__()
         self.title("Detector de Pragas em Morango - TCC")
+        
+        ui_logger.info("Inicializando aplicação frontend")
 
-        # Configuração específica para 800x400
-        self.geometry("800x400")
+        # Configuração específica para 800x480
+        self.geometry("800x480")
         self.attributes("-fullscreen", True)
         self.resizable(False, False)
         self.configure(fg_color=COLORS["bg"])
 
-        self.minsize(800, 400)
-        self.maxsize(800, 400)
+        self.minsize(800, 480)
+        self.maxsize(800, 480)
 
         self.config = config
         self.running = True
@@ -58,6 +62,8 @@ class FrontendApp(ctk.CTk):
 
         # Criar diretório de capturas
         os.makedirs(CAPTURES_DIR, exist_ok=True)
+        
+        ui_logger.info("Aplicação frontend inicializada com sucesso")
 
     # ============================
     # Backend / Rede / Vídeo
@@ -68,13 +74,12 @@ class FrontendApp(ctk.CTk):
         udp_cfg = self.config.get("udp", {})
         video_cfg = self.config.get("video", {}) or {}
 
+        network_logger.info("Configurando conexões de rede...")
+
         # Cliente TCP (comandos e resultados)
         self.tcp_client = TCPClient(server.get("host"), server.get("port"))
 
         # Command handler (usando sua classe core) — mantém a API existente
-        # Observação: ele pode precisar saber a porta UDP (para REGISTER_UDP)
-        # Se sua implementação atual exige, continue passando udp_cfg.get("port")
-        # ou troque para listen_port se for o campo usado no config.
         self.commands = CommandHandler(self.tcp_client, udp_cfg.get("port") or udp_cfg.get("listen_port"))
 
         # Seleção do transporte de vídeo
@@ -87,10 +92,10 @@ class FrontendApp(ctk.CTk):
             self.video_stream = VideoStreamTCP(
                 host=tcp_host,
                 port=tcp_port,
-                frame_callback=self._on_frame_received  # entrega RGB para a UI (compatível com o seu código)
+                frame_callback=self._on_frame_received
             )
             self._video_transport = "tcp"
-            print(f"🎥 Vídeo (TCP): {tcp_host}:{tcp_port}")
+            video_logger.info(f"Vídeo configurado via TCP: {tcp_host}:{tcp_port}")
         else:
             # UDP (padrão): recebe datagramas fragmentados e remonta
             udp_port = int(udp_cfg.get("listen_port") or udp_cfg.get("port") or 5005)
@@ -98,21 +103,24 @@ class FrontendApp(ctk.CTk):
             self.video_stream = VideoStreamUDP(
                 udp_port=udp_port,
                 max_packet=max_packet,
-                frame_callback=self._on_frame_received  # entrega RGB para a UI (compatível com o seu código)
+                frame_callback=self._on_frame_received
             )
             self._video_transport = "udp"
-            print(f"🎥 Vídeo (UDP): porta {udp_port} (max_packet={max_packet})")
+            video_logger.info(f"Vídeo configurado via UDP: porta {udp_port} (max_packet={max_packet})")
 
         # Cleanup worker (opcional): só se o stream expuser .cleanup()
         self.cleanup_worker = None
         if hasattr(self.video_stream, "cleanup") and callable(getattr(self.video_stream, "cleanup")):
             self.cleanup_worker = CleanupWorker(self.video_stream.cleanup, interval=0.5)
+            ui_logger.debug("Cleanup worker configurado")
 
     # ============================
     # UI
     # ============================
     def _setup_ui(self):
         """Configura layout principal da UI"""
+        ui_logger.debug("Configurando interface do usuário")
+        
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
@@ -135,9 +143,13 @@ class FrontendApp(ctk.CTk):
 
         # Dicionário de screens
         self.screens = {}
+        
+        ui_logger.debug("UI configurada com sucesso")
 
     def _register_screens(self):
         """Registra todas as telas da aplicação"""
+        ui_logger.debug("Registrando telas da aplicação")
+        
         # Home screen (vídeo principal)
         home_screen = HomeScreen(self.content, on_capture=self._on_capture_requested)
         self._register_screen("home", home_screen)
@@ -162,26 +174,35 @@ class FrontendApp(ctk.CTk):
 
         # Mostrar tela inicial
         self.show_screen("home")
+        
+        ui_logger.info("Todas as telas registradas")
 
     def _register_screen(self, name: str, screen):
         """Registra uma tela no gerenciador"""
         screen.grid(row=0, column=0, sticky="nsew")
         self.screens[name] = screen
         screen.lower()
+        
+        ui_logger.debug(f"Tela registrada: {name}")
 
     def show_screen(self, name: str):
         """Mostra uma tela específica"""
+        ui_logger.debug(f"Alternando para tela: {name}")
+        
         for screen_name, screen in self.screens.items():
             screen.lower()
 
         if name in self.screens:
             self.screens[name].lift()
+            ui_logger.info(f"Tela ativa: {name}")
 
     # ============================
     # Threads / ciclo de vida
     # ============================
     def _start_background_workers(self):
         """Inicia threads em background"""
+        ui_logger.debug("Iniciando threads em background")
+        
         # Conectar TCP e (se UDP) registrar porta
         threading.Thread(target=self._tcp_connect_and_register, daemon=True).start()
 
@@ -194,34 +215,40 @@ class FrontendApp(ctk.CTk):
         # Cleanup worker (só se disponível)
         if self.cleanup_worker:
             self.cleanup_worker.start()
+            
+        ui_logger.info("Threads em background iniciadas")
 
     def _tcp_connect_and_register(self):
         """Conecta TCP e, se transporte for UDP, registra porta UDP"""
         try:
+            network_logger.info("Conectando ao backend via TCP...")
             self.tcp_client.connect()
-            print("✅ Conectado ao backend")
 
             if self._video_transport == "udp":
                 # Caso seu CommandHandler tenha método register_udp(), use-o.
                 if hasattr(self.commands, 'register_udp') and callable(getattr(self.commands, 'register_udp')):
                     try:
                         self.commands.register_udp()
+                        network_logger.info("Registro UDP enviado com sucesso")
                     except Exception as e:
-                        print(f"⚠️ Falha no register_udp(): {e}")
+                        network_logger.error(f"Falha no register_udp(): {e}")
                 else:
                     # Fallback: mandar o comando explicitamente (mantenha se preferir)
                     udp_cfg = self.config.get("udp", {})
                     udp_port = int(udp_cfg.get("listen_port") or udp_cfg.get("port") or 5005)
                     try:
                         self.tcp_client.send(f"REGISTER_UDP:{udp_port}".encode('utf-8'))
+                        network_logger.info(f"Comando REGISTER_UDP enviado: {udp_port}")
                     except Exception as e:
-                        print(f"⚠️ Falha ao enviar REGISTER_UDP:{udp_port}: {e}")
+                        network_logger.error(f"Falha ao enviar REGISTER_UDP:{udp_port}: {e}")
 
         except Exception as e:
-            print(f"❌ Erro na conexão: {e}")
+            network_logger.error(f"Erro na conexão: {e}")
 
     def _tcp_result_listener(self):
         """Escuta resultados do backend via TCP"""
+        network_logger.info("Iniciando listener de resultados TCP")
+        
         while self.running:
             try:
                 if self.tcp_client.sock:
@@ -231,17 +258,17 @@ class FrontendApp(ctk.CTk):
                         data = self.tcp_client.sock.recv(1024)
                         if data:
                             result_str = data.decode('utf-8').strip()
-                            print(f"📨 Resultado recebido: {result_str}")
+                            network_logger.debug(f"Resultado recebido: {result_str}")
                             self._process_backend_result(result_str)
                     except socket.timeout:
                         continue
                     except Exception as e:
-                        print(f"Erro recebendo resultado: {e}")
+                        network_logger.error(f"Erro recebendo resultado: {e}")
                         time.sleep(0.1)
                 else:
                     time.sleep(1)
             except Exception as e:
-                print(f"Erro no listener TCP: {e}")
+                network_logger.error(f"Erro no listener TCP: {e}")
                 time.sleep(1)
 
     # ============================
@@ -269,22 +296,26 @@ class FrontendApp(ctk.CTk):
                     label = result_str
                     confidence = "0%"
 
+            command_logger.info(f"Resultado processado: {label} ({confidence})")
             self._on_analysis_result({"label": label, "confidence": confidence})
 
         except Exception as e:
-            print(f"Erro processando resultado: {e}")
+            command_logger.error(f"Erro processando resultado: {e}")
             self._on_analysis_result({"label": "Erro", "confidence": "0%"})
 
     # ============================
     # Navegação
     # ============================
     def _on_home(self):
+        ui_logger.debug("Navegando para tela Home")
         self.show_screen("home")
 
     def _on_map(self):
+        ui_logger.debug("Navegando para tela Mapa")
         self.show_screen("map")
 
     def _on_gallery(self):
+        ui_logger.debug("Navegando para tela Galeria")
         # Reconstruir grid da galeria ao abrir
         gallery = self.screens.get("gallery")
         if gallery and hasattr(gallery, '_build_grid'):
@@ -292,6 +323,7 @@ class FrontendApp(ctk.CTk):
         self.show_screen("gallery")
 
     def _on_config(self):
+        ui_logger.debug("Navegando para tela Configurações")
         self.show_screen("settings")
 
     # ============================
@@ -299,6 +331,7 @@ class FrontendApp(ctk.CTk):
     # ============================
     def _on_capture_requested(self):
         """Callback quando usuário clica em Capturar"""
+        ui_logger.info("Captura solicitada pelo usuário")
         # Feedback imediato
         self.show_loading()
 
@@ -313,15 +346,16 @@ class FrontendApp(ctk.CTk):
                         # Enviar comando de captura para backend
                         if hasattr(self.commands, 'send_capture'):
                             self.commands.send_capture()
+                            command_logger.info("Comando CAPTURE enviado para backend")
                     else:
-                        print("❌ Nenhum frame disponível")
+                        ui_logger.warning("Nenhum frame disponível para captura")
                         self._on_analysis_result({"label": "Erro: Sem frame", "confidence": "0%"})
                 else:
-                    print("❌ Método get_current_frame não disponível")
+                    ui_logger.error("Método get_current_frame não disponível")
                     self._on_analysis_result({"label": "Erro: UI", "confidence": "0%"})
 
             except Exception as e:
-                print(f"❌ Erro na captura: {e}")
+                ui_logger.error(f"Erro na captura: {e}")
                 self._on_analysis_result({"label": f"Erro: {str(e)}", "confidence": "0%"})
 
         threading.Thread(target=capture_worker, daemon=True).start()
@@ -336,11 +370,12 @@ class FrontendApp(ctk.CTk):
                 label = str(payload)
                 confidence = "—"
 
+            ui_logger.info(f"Exibindo resultado: {label} ({confidence})")
             # Atualizar UI na thread principal
             self.after(0, lambda: self.show_result(label, confidence))
 
         except Exception as e:
-            print(f"Erro processando resultado: {e}")
+            ui_logger.error(f"Erro processando resultado: {e}")
             self.after(0, lambda: self.show_result("Erro", "0%"))
 
     def _on_settings_save(self, new_settings):
@@ -352,9 +387,9 @@ class FrontendApp(ctk.CTk):
                 f.seek(0)
                 json.dump(config, f, indent=2)
                 f.truncate()
-            print("✅ Configurações salvas")
+            ui_logger.info("Configurações salvas com sucesso")
         except Exception as e:
-            print(f"❌ Erro salvando configurações: {e}")
+            ui_logger.error(f"Erro salvando configurações: {e}")
 
     # ============================
     # Integração com a HomeScreen
@@ -405,38 +440,46 @@ class FrontendApp(ctk.CTk):
 
             self.update_frame(pil_image)
         except Exception as e:
-            print(f"Erro processando frame: {e}")
+            video_logger.error(f"Erro processando frame: {e}")
 
     # ============================
     # Encerramento
     # ============================
     def exit_app(self):
         """Encerra aplicação corretamente"""
+        ui_logger.info("Encerrando aplicação frontend...")
         self.running = False
 
         try:
             if self.cleanup_worker:
                 self.cleanup_worker.stop(join=True, timeout=1.0)
-        except Exception:
-            pass
+                ui_logger.debug("Cleanup worker parado")
+        except Exception as e:
+            ui_logger.debug(f"Erro parando cleanup worker: {e}")
 
         try:
             if hasattr(self.video_stream, 'stop'):
                 self.video_stream.stop()
-        except Exception:
-            pass
+                video_logger.info("Video stream parado")
+        except Exception as e:
+            video_logger.error(f"Erro parando video stream: {e}")
 
         try:
             if hasattr(self.tcp_client, 'close'):
                 self.tcp_client.close()
-        except Exception:
-            pass
+                network_logger.info("Cliente TCP fechado")
+        except Exception as e:
+            network_logger.error(f"Erro fechando cliente TCP: {e}")
 
+        ui_logger.info("Aplicação frontend encerrada")
         self.destroy()
 
     def run(self):
         """Inicia aplicação"""
+        ui_logger.info("Iniciando loop principal da aplicação")
         try:
             self.mainloop()
+        except Exception as e:
+            ui_logger.critical(f"Erro no loop principal: {e}")
         finally:
             self.exit_app()

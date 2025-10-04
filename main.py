@@ -2,6 +2,7 @@ import json
 import os
 import traceback
 from ui.app import FrontendApp 
+from utils.logger import frontend_logger, log_frontend_start
 
 CONFIG_PATH = "config.json"
 
@@ -24,37 +25,55 @@ def _deep_merge(dst, src):
 
 def load_config(path: str):
     if not os.path.exists(path):
-        raise FileNotFoundError(f"Config not found: {path}")
-    with open(path, "r", encoding="utf-8") as f:
-        cfg = json.load(f)
+        error_msg = f"Arquivo de configuração não encontrado: {path}"
+        frontend_logger.error(error_msg)
+        raise FileNotFoundError(error_msg)
+        
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
 
-    # aplica defaults sem sobrescrever valores já existentes
-    cfg = _deep_merge(cfg, DEFAULTS)
+        # aplica defaults sem sobrescrever valores já existentes
+        cfg = _deep_merge(cfg, DEFAULTS)
 
-    # override opcional via variável de ambiente (útil p/ testes)
-    env_transport = os.getenv("VIDEO_TRANSPORT")
-    if env_transport:
-        cfg["video"]["transport"] = env_transport.lower().strip()
+        # override opcional via variável de ambiente (útil p/ testes)
+        env_transport = os.getenv("VIDEO_TRANSPORT")
+        if env_transport:
+            cfg["video"]["transport"] = env_transport.lower().strip()
+            frontend_logger.info(f"Transporte de vídeo sobrescrito por variável de ambiente: {env_transport}")
 
-    # saneamento simples
-    if cfg["video"]["transport"] not in ("udp", "tcp"):
-        print(f"⚠️  VIDEO_TRANSPORT inválido: {cfg['video']['transport']}. Voltando para 'udp'.")
-        cfg["video"]["transport"] = "udp"
+        # saneamento simples
+        if cfg["video"]["transport"] not in ("udp", "tcp"):
+            frontend_logger.warning(f"VIDEO_TRANSPORT inválido: {cfg['video']['transport']}. Usando 'udp' como padrão.")
+            cfg["video"]["transport"] = "udp"
 
-    return cfg
+        frontend_logger.info(f"Configuração carregada: transporte={cfg['video']['transport']}")
+        return cfg
+        
+    except Exception as e:
+        frontend_logger.error(f"Erro ao carregar configuração: {e}")
+        raise
 
 def main():
     try:
+        # Log de inicialização
+        log_frontend_start()
+        
         config = load_config(CONFIG_PATH)
-        print(
-            f"🎛️  Frontend iniciando | video.transport={config['video']['transport']} "
+        
+        frontend_logger.info(
+            f"Frontend iniciando | video.transport={config['video']['transport']} "
             + (f"| tcp={config['video']['tcp_host']}:{config['video']['tcp_port']}"
                if config['video']['transport']=='tcp' else "")
         )
-        app = FrontendApp(config)  # o FrontendApp agora escolhe UDP/TCP internamente
+        
+        app = FrontendApp(config)
+        frontend_logger.info("Aplicação frontend criada, iniciando loop principal...")
         app.run()
+        
     except Exception as e:
-        print("Fatal error starting application:", e)
+        frontend_logger.critical(f"Erro fatal ao iniciar aplicação: {e}")
+        frontend_logger.debug(traceback.format_exc())
         traceback.print_exc()
 
 if __name__ == "__main__":
