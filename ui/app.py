@@ -25,12 +25,15 @@ from utils.logger import ui_logger, network_logger, video_logger, command_logger
 
 CAPTURES_DIR = "/"
 
+
 class FrontendApp(ctk.CTk):
     """
     Controlador principal da UI - otimizado para 800x480
     """
+
     def __init__(self, config: Dict[str, Any]):
         super().__init__()
+        self._rxbuf = b""
         self.title("Detector de Pragas em Morango - TCC")
         
         ui_logger.info("Inicializando aplicação frontend")
@@ -131,7 +134,7 @@ class FrontendApp(ctk.CTk):
             on_config=self._on_config,
             on_map=self._on_map,
             on_gallery=self._on_gallery,
-            on_home=self._on_home
+            on_home=self._on_home,
         )
         self.sidebar.grid(row=0, column=0, sticky="ns")
 
@@ -156,19 +159,19 @@ class FrontendApp(ctk.CTk):
 
         # Gallery screen
         gallery_screen = GalleryScreen(self.content, captures_dir=CAPTURES_DIR)
-        if hasattr(gallery_screen, 'back_btn'):
+        if hasattr(gallery_screen, "back_btn"):
             gallery_screen.back_btn.configure(command=self._on_home)
         self._register_screen("gallery", gallery_screen)
 
         # Map screen
         map_screen = MapScreen(self.content)
-        if hasattr(map_screen, 'back_btn'):
+        if hasattr(map_screen, "back_btn"):
             map_screen.back_btn.configure(command=self._on_home)
         self._register_screen("map", map_screen)
 
         # Settings screen
         settings_screen = SettingsScreen(self.content, on_save=self._on_settings_save)
-        if hasattr(settings_screen, 'back_btn'):
+        if hasattr(settings_screen, "back_btn"):
             settings_screen.back_btn.configure(command=self._on_home)
         self._register_screen("settings", settings_screen)
 
@@ -189,9 +192,8 @@ class FrontendApp(ctk.CTk):
         """Mostra uma tela específica"""
         ui_logger.debug(f"Alternando para tela: {name}")
         
-        for screen_name, screen in self.screens.items():
+        for _, screen in self.screens.items():
             screen.lower()
-
         if name in self.screens:
             self.screens[name].lift()
             ui_logger.info(f"Tela ativa: {name}")
@@ -209,7 +211,7 @@ class FrontendApp(ctk.CTk):
         # Iniciar recepção de vídeo (a classe do stream cuida do loop internamente)
         self.video_stream.start()
 
-        # Loop de escuta TCP para resultados (seu código atual)
+        # Loop de escuta TCP para resultados
         threading.Thread(target=self._tcp_result_listener, daemon=True).start()
 
         # Cleanup worker (só se disponível)
@@ -226,18 +228,18 @@ class FrontendApp(ctk.CTk):
 
             if self._video_transport == "udp":
                 # Caso seu CommandHandler tenha método register_udp(), use-o.
-                if hasattr(self.commands, 'register_udp') and callable(getattr(self.commands, 'register_udp')):
+                if hasattr(self.commands, "register_udp") and callable(getattr(self.commands, "register_udp")):
                     try:
                         self.commands.register_udp()
                         network_logger.info("Registro UDP enviado com sucesso")
                     except Exception as e:
                         network_logger.error(f"Falha no register_udp(): {e}")
                 else:
-                    # Fallback: mandar o comando explicitamente (mantenha se preferir)
+                    # Fallback: mandar o comando explicitamente
                     udp_cfg = self.config.get("udp", {})
                     udp_port = int(udp_cfg.get("listen_port") or udp_cfg.get("port") or 5005)
                     try:
-                        self.tcp_client.send(f"REGISTER_UDP:{udp_port}".encode('utf-8'))
+                        self.tcp_client.send(f"REGISTER_UDP:{udp_port}".encode("utf-8"))
                         network_logger.info(f"Comando REGISTER_UDP enviado: {udp_port}")
                     except Exception as e:
                         network_logger.error(f"Falha ao enviar REGISTER_UDP:{udp_port}: {e}")
@@ -275,33 +277,34 @@ class FrontendApp(ctk.CTk):
     # Processamento de resultados
     # ============================
     def _process_backend_result(self, result_str: str):
-        """Processa resultado do backend"""
+        """Processa resultado do backend (JSON preferencial; fallback 'LABEL:CONF')."""
         try:
-            # Esperado: "LABEL:CONFIDENCE" ou JSON
+            # 1) tente JSON primeiro
+            data = json.loads(result_str)
+            label = data.get("label", "Indeterminado")
+            conf = data.get("confidence", 0)
+        except Exception:
+            # 2) fallback: "LABEL:CONF" (uma única vez para não quebrar rótulos com ':')
             if ":" in result_str:
-                parts = result_str.split(":")
-                if len(parts) >= 2:
-                    label = parts[0]
-                    confidence = parts[1]
-                else:
-                    label = result_str
-                    confidence = "0%"
-            else:
-                # Tentar parsear como JSON
+                label_part, conf_part = result_str.split(":", 1)
+                label = label_part.strip()
+                conf_str = conf_part.strip().strip("%").replace(",", ".")
                 try:
-                    result_data = json.loads(result_str)
-                    label = result_data.get("label", "Indeterminado")
-                    confidence = result_data.get("confidence", "0%")
-                except:
-                    label = result_str
-                    confidence = "0%"
+                    conf = float(conf_str)
+                except Exception:
+                    conf = conf_str  # deixa como string se não for número
+            else:
+                label = result_str.strip()
+                conf = 0
 
-            command_logger.info(f"Resultado processado: {label} ({confidence})")
-            self._on_analysis_result({"label": label, "confidence": confidence})
+        # Normaliza confiança para texto amigável
+        if isinstance(conf, (int, float)):
+            conf_text = f"{conf:.1%}" if 0.0 <= conf <= 1.0 else f"{conf:.1f}%"
+        else:
+            conf_text = str(conf)
 
-        except Exception as e:
-            command_logger.error(f"Erro processando resultado: {e}")
-            self._on_analysis_result({"label": "Erro", "confidence": "0%"})
+        command_logger.info(f"Resultado processado: {label} ({conf_text})")
+        self._on_analysis_result({"label": label, "confidence": conf_text})
 
     # ============================
     # Navegação
@@ -318,7 +321,7 @@ class FrontendApp(ctk.CTk):
         ui_logger.debug("Navegando para tela Galeria")
         # Reconstruir grid da galeria ao abrir
         gallery = self.screens.get("gallery")
-        if gallery and hasattr(gallery, '_build_grid'):
+        if gallery and hasattr(gallery, "_build_grid"):
             gallery._build_grid()
         self.show_screen("gallery")
 
@@ -340,11 +343,11 @@ class FrontendApp(ctk.CTk):
             try:
                 # Obter frame atual
                 home_screen = self.screens.get("home")
-                if hasattr(home_screen, 'get_current_frame'):
+                if hasattr(home_screen, "get_current_frame"):
                     frame = home_screen.get_current_frame()
                     if frame:
                         # Enviar comando de captura para backend
-                        if hasattr(self.commands, 'send_capture'):
+                        if hasattr(self.commands, "send_capture"):
                             self.commands.send_capture()
                             command_logger.info("Comando CAPTURE enviado para backend")
                     else:
@@ -396,35 +399,43 @@ class FrontendApp(ctk.CTk):
     # ============================
     def update_frame(self, pil_image: Image.Image):
         """Atualiza frame de vídeo (chamado pelo backend)"""
+
         def update_ui():
             home_screen = self.screens.get("home")
-            if home_screen and hasattr(home_screen, 'update_frame'):
+            if home_screen and hasattr(home_screen, "update_frame"):
                 home_screen.update_frame(pil_image)
+
         self.after(0, update_ui)
 
     def show_loading(self):
         """Mostra estado de loading"""
+
         def show_loading_ui():
             home_screen = self.screens.get("home")
-            if home_screen and hasattr(home_screen, 'show_state'):
+            if home_screen and hasattr(home_screen, "show_state"):
                 home_screen.show_state("loading")
+
         self.after(0, show_loading_ui)
 
     def show_result(self, result_text: str, confidence: str):
         """Mostra resultado da análise"""
+
         def show_result_ui():
             home_screen = self.screens.get("home")
-            if home_screen and hasattr(home_screen, 'set_result'):
+            if home_screen and hasattr(home_screen, "set_result"):
                 home_screen.set_result(result_text, confidence)
                 home_screen.show_state("result")
+
         self.after(0, show_result_ui)
 
     def show_video(self):
         """Volta para estado de vídeo"""
+
         def show_video_ui():
             home_screen = self.screens.get("home")
-            if home_screen and hasattr(home_screen, 'show_state'):
+            if home_screen and hasattr(home_screen, "show_state"):
                 home_screen.show_state("video")
+
         self.after(0, show_video_ui)
 
     def _on_frame_received(self, frame_rgb):
@@ -458,14 +469,14 @@ class FrontendApp(ctk.CTk):
             ui_logger.debug(f"Erro parando cleanup worker: {e}")
 
         try:
-            if hasattr(self.video_stream, 'stop'):
+            if hasattr(self.video_stream, "stop"):
                 self.video_stream.stop()
                 video_logger.info("Video stream parado")
         except Exception as e:
             video_logger.error(f"Erro parando video stream: {e}")
 
         try:
-            if hasattr(self.tcp_client, 'close'):
+            if hasattr(self.tcp_client, "close"):
                 self.tcp_client.close()
                 network_logger.info("Cliente TCP fechado")
         except Exception as e:
