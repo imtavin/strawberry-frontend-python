@@ -1,0 +1,17 @@
+# === Frontend - Python 3.10 ===
+
+# UI
+customtkinter==5.2.2
+darkdetect==0.8.0
+
+# Processamento de imagem
+Pillow==10.4.0
+opencv-python==4.10.0.84
+numpy==1.26.4
+
+# Utilitários
+psutil==5.9.8
+requests==2.31.0
+colorama==0.4.6
+packaging==25.0
+netifaces==0.11.0

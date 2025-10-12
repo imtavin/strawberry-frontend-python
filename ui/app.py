@@ -60,6 +60,13 @@ class FrontendApp(ctk.CTk):
         # Registrar screens
         self._register_screens()
 
+        # Armazenar informações da Raspberry
+        self.raspberry_info = {
+            "ip": "Buscando...",
+            "hostname": "Desconhecido",
+            "last_update": None
+        }
+
         # Iniciar threads
         self._start_background_workers()
 
@@ -283,6 +290,11 @@ class FrontendApp(ctk.CTk):
             data = json.loads(result_str)
             label = data.get("label", "Indeterminado")
             conf = data.get("confidence", 0)
+
+            # Verificar se é informação da Raspberry
+            if isinstance(data, dict) and data.get("type") == "raspberry_info":
+                self._on_raspberry_info_received(data)
+                return
         except Exception:
             # 2) fallback: "LABEL:CONF" (uma única vez para não quebrar rótulos com ':')
             if ":" in result_str:
@@ -305,6 +317,32 @@ class FrontendApp(ctk.CTk):
 
         command_logger.info(f"Resultado processado: {label} ({conf_text})")
         self._on_analysis_result({"label": label, "confidence": conf_text})
+
+    def _on_raspberry_info_received(self, raspberry_data: dict):
+        """Processa informações da Raspberry recebidas do backend"""
+        try:
+            self.raspberry_info = {
+                "ip": raspberry_data.get("ip", "Indisponível"),
+                "hostname": raspberry_data.get("hostname", "Desconhecido"),
+                "last_update": raspberry_data.get("timestamp")
+            }
+            
+            ui_logger.info(f"Informações da Raspberry recebidas: {self.raspberry_info['ip']}")
+            
+            # Atualizar a tela de configurações se estiver visível
+            self._update_settings_display()
+            
+        except Exception as e:
+            ui_logger.error(f"Erro ao processar informações da Raspberry: {e}")
+
+    def _update_settings_display(self):
+        """Atualiza a exibição na tela de configurações"""
+        try:
+            settings_screen = self.screens.get("settings")
+            if settings_screen and hasattr(settings_screen, "update_raspberry_info"):
+                self.after(0, lambda: settings_screen.update_raspberry_info(self.raspberry_info))
+        except Exception as e:
+            ui_logger.debug(f"Erro ao atualizar display de configurações: {e}")
 
     # ============================
     # Navegação

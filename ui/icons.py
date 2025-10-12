@@ -19,7 +19,11 @@ COLORS = {
     "accent": "#ff4757",
     "accent_hover": "#ff3742",
     "success": "#2ed573",
-    "warning": "#ffa502",
+    "warning": "#ffa726",
+    "warning_hover": "#ff9800",
+    "success_hover": "#4caf50",
+    "info": "#29b6f6",
+    "info_hover": "#0288d1",
 }
 
 # Fontes menores para caber na tela 800x400
@@ -27,6 +31,8 @@ FONTS = {
     "title": ("Inter", 16, "bold"),      # Reduzido de 20
     "subtitle": ("Inter", 14, "bold"),   # Reduzido de 16
     "menu": ("Inter", 12, "bold"),       # Reduzido de 14
+    "body_bold": ("Inter", 11, "bold"),
+    "body_small": ("Inter", 10),
     "body": ("Inter", 11),               # Reduzido de 13
     "pill": ("Inter", 10, "bold"),       # Reduzido de 12
     "small": ("Inter", 9),               # Reduzido de 11
