@@ -1,7 +1,7 @@
 # ui/sidebar.py
 import customtkinter as ctk
 from ui.icons import COLORS, FONTS, SIDEBAR_WIDTH, ICONS
-from ui.widgets.battery_widget import BatteryWidget
+from ui.components.battery_widget import BatteryWidget
 
 class Sidebar(ctk.CTkFrame):
     """Sidebar compacta sem botão Home"""

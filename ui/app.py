@@ -40,7 +40,7 @@ class FrontendApp(ctk.CTk):
 
         # Configuração específica para 800x480
         self.geometry("800x480")
-        self.attributes("-fullscreen", True)
+        #self.attributes("-fullscreen", True)
         self.resizable(False, False)
         self.configure(fg_color=COLORS["bg"])
 
@@ -177,7 +177,10 @@ class FrontendApp(ctk.CTk):
         self._register_screen("map", map_screen)
 
         # Settings screen
-        settings_screen = SettingsScreen(self.content, on_save=self._on_settings_save)
+        settings_screen = SettingsScreen(
+            self.content,
+            on_save=self._on_settings_save
+            )
         if hasattr(settings_screen, "back_btn"):
             settings_screen.back_btn.configure(command=self._on_home)
         self._register_screen("settings", settings_screen)
@@ -233,6 +236,16 @@ class FrontendApp(ctk.CTk):
             network_logger.info("Conectando ao backend via TCP...")
             self.tcp_client.connect()
 
+            # Solicitar informações da Raspberry após conectar
+            try:
+                # Pequeno delay para garantir que a conexão está estável
+                time.sleep(0.5)
+                # Enviar comando para solicitar informações
+                self.tcp_client.send("GET_INFO".encode("utf-8"))
+                network_logger.info("Solicitação de informações da Raspberry enviada")
+            except Exception as e:
+                network_logger.warning(f"Falha ao solicitar informações: {e}")
+
             if self._video_transport == "udp":
                 # Caso seu CommandHandler tenha método register_udp(), use-o.
                 if hasattr(self.commands, "register_udp") and callable(getattr(self.commands, "register_udp")):
@@ -266,9 +279,15 @@ class FrontendApp(ctk.CTk):
                     try:
                         data = self.tcp_client.sock.recv(1024)
                         if data:
-                            result_str = data.decode('utf-8').strip()
-                            network_logger.debug(f"Resultado recebido: {result_str}")
-                            self._process_backend_result(result_str)
+                            # 🔥 CORREÇÃO: Processar cada linha recebida
+                            received_data = data.decode('utf-8').strip()
+                            
+                            # Dividir por linhas caso receba múltiplas mensagens
+                            for line in received_data.split('\n'):
+                                if line.strip():  # Ignorar linhas vazias
+                                    network_logger.debug(f"Dados recebidos: {line}")
+                                    self._process_backend_result(line)
+                                    
                     except socket.timeout:
                         continue
                     except Exception as e:
@@ -286,37 +305,78 @@ class FrontendApp(ctk.CTk):
     def _process_backend_result(self, result_str: str):
         """Processa resultado do backend (JSON preferencial; fallback 'LABEL:CONF')."""
         try:
-            # 1) tente JSON primeiro
-            data = json.loads(result_str)
-            label = data.get("label", "Indeterminado")
-            conf = data.get("confidence", 0)
-
-            # Verificar se é informação da Raspberry
-            if isinstance(data, dict) and data.get("type") == "raspberry_info":
-                self._on_raspberry_info_received(data)
+            # Verificar se é informação da Raspberry PRIMEIRO
+            if result_str.startswith('{') and result_str.endswith('}'):
+                data = json.loads(result_str)
+                
+                if isinstance(data, dict) and data.get("type") == "raspberry_info":
+                    self._on_raspberry_info_received(data)
+                    return
+                
+                # Processar resultado normal de inferência
+                label = data.get("label", "Indeterminado")
+                conf = data.get("confidence", 0)
+                
+            # Processar respostas de Wi-Fi
+            elif result_str.startswith("WIFI:"):
+                parts = result_str.split(":", 2)
+                status = parts[1] if len(parts) > 1 else "UNKNOWN"
+                message = parts[2] if len(parts) > 2 else ""
+                
+                if status == "SUCCESS":
+                    ui_logger.info(f"Wi-Fi conectado: {message}")
+                    self.after(0, lambda: self.screens["settings"]._show_wifi_status(f"✅ {message}", True))
+                elif status == "FAILED":
+                    ui_logger.error(f"Falha Wi-Fi: {message}")
+                    self.after(0, lambda: self.screens["settings"]._show_wifi_status(f"❌ {message}", False))
+                else:
+                    ui_logger.error(f"Erro Wi-Fi: {message}")
+                    self.after(0, lambda: self.screens["settings"]._show_wifi_status(f"⚠️ {message}", False))
                 return
-        except Exception:
-            # 2) fallback: "LABEL:CONF" (uma única vez para não quebrar rótulos com ':')
-            if ":" in result_str:
-                label_part, conf_part = result_str.split(":", 1)
-                label = label_part.strip()
-                conf_str = conf_part.strip().strip("%").replace(",", ".")
-                try:
-                    conf = float(conf_str)
-                except Exception:
-                    conf = conf_str  # deixa como string se não for número
+                
+            # Processar outros comandos do sistema
+            elif result_str.startswith("SERVICE:"):
+                parts = result_str.split(":", 1)
+                status = parts[1] if len(parts) > 1 else "UNKNOWN"
+                ui_logger.info(f"Status do serviço: {status}")
+                return
+                
+            elif result_str.startswith("LOGS:"):
+                # Aqui você pode processar logs se quiser exibi-los na UI
+                log_content = result_str[5:]
+                ui_logger.info(f"Logs recebidos: {len(log_content)} caracteres")
+                return
+                
             else:
-                label = result_str.strip()
-                conf = 0
+                # Fallback para formato antigo
+                if ":" in result_str:
+                    label_part, conf_part = result_str.split(":", 1)
+                    label = label_part.strip()
+                    conf_str = conf_part.strip().strip("%").replace(",", ".")
+                    try:
+                        conf = float(conf_str)
+                    except Exception:
+                        conf = conf_str
+                else:
+                    label = result_str.strip()
+                    conf = 0
 
-        # Normaliza confiança para texto amigável
-        if isinstance(conf, (int, float)):
-            conf_text = f"{conf:.1%}" if 0.0 <= conf <= 1.0 else f"{conf:.1f}%"
-        else:
-            conf_text = str(conf)
+            # Normaliza confiança (código existente)
+            if isinstance(conf, (int, float)):
+                conf_text = f"{conf:.1%}" if 0.0 <= conf <= 1.0 else f"{conf:.1f}%"
+            else:
+                conf_text = str(conf)
 
-        command_logger.info(f"Resultado processado: {label} ({conf_text})")
-        self._on_analysis_result({"label": label, "confidence": conf_text})
+            command_logger.info(f"Resultado processado: {label} ({conf_text})")
+            self._on_analysis_result({"label": label, "confidence": conf_text})
+        
+        except json.JSONDecodeError:
+            # Se não for JSON válido, tratar como string simples
+            command_logger.warning(f"Dados recebidos não são JSON válido: {result_str}")
+            self._on_analysis_result({"label": result_str, "confidence": "0%"})
+        except Exception as e:
+            command_logger.error(f"Erro processando resultado: {e}")
+            self._on_analysis_result({"label": f"Erro: {str(e)}", "confidence": "0%"})
 
     def _on_raspberry_info_received(self, raspberry_data: dict):
         """Processa informações da Raspberry recebidas do backend"""

@@ -3,8 +3,8 @@ import customtkinter as ctk
 from PIL import Image, ImageTk
 from typing import Callable, Optional
 from ui.icons import COLORS, FONTS, ICONS
-from ui.widgets.capture_button import CaptureButton
-from ui.widgets.battery_widget import BatteryWidget
+from ui.components.capture_button import CaptureButton
+from ui.components.battery_widget import BatteryWidget
 
 class VideoState(ctk.CTkFrame):
     """Estado de vídeo com botão sobreposto"""
@@ -235,7 +235,7 @@ class ResultState(ctk.CTkFrame):
         self.conf_pill.configure(text=f"Confiança: {confidence}")
 
 class HomeScreen(ctk.CTkFrame):
-    """Tela principal otimizada para 800x400"""
+    """Tela principal otimizada para 800x480"""
     
     def __init__(self, master, on_capture: Callable, *args, **kwargs):
         super().__init__(master, fg_color=COLORS["panel"], corner_radius=16, *args, **kwargs)
