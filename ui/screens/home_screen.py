@@ -61,7 +61,7 @@ class VideoState(ctk.CTkFrame):
             container_width = self.video_label.winfo_width()
             container_height = self.video_label.winfo_height()
             
-            # Usar dimensions reais se disponíveis, senão usar estimativas
+            # Usar dimensões reais se disponíveis, senão usar estimativas
             if container_width < 10:  # Se ainda não foi renderizado
                 container_width = 580
                 container_height = 320
@@ -95,6 +95,7 @@ class VideoState(ctk.CTkFrame):
     def get_current_frame(self):
         """Retorna o frame atual para captura"""
         return self.current_image
+
 
 class LoadingState(ctk.CTkFrame):
     """Tela de loading compacta"""
@@ -160,6 +161,7 @@ class LoadingState(ctk.CTkFrame):
         self.dots_label.configure(text=dots)
         self.dot_count += 1
         self.after(500, self.animate_dots)
+
 
 class ResultState(ctk.CTkFrame):
     """Tela de resultado compacta"""
@@ -231,8 +233,36 @@ class ResultState(ctk.CTkFrame):
             self.on_back()
 
     def set_result(self, text: str, confidence: str):
-        self.result_pill.configure(text=f"Resultado: {text}")
-        self.conf_pill.configure(text=f"Confiança: {confidence}")
+        """Define o resultado da análise, traduzido e formatado com cores dinâmicas."""
+        try:
+            conf_value = float(confidence)
+        except:
+            conf_value = 0.0
+
+        label = (text or "").strip().lower()
+
+        # Define texto e cor do resultado
+        if label in ["unknown", "não identificado", "nao identificado", ""]:
+            display_text = "🚫 Não identificado"
+            pill_color = COLORS["pill_dark"]
+        else:
+            display_text = f"🌿 {text.capitalize()}"
+            pill_color = COLORS["pill"]
+
+        # Define cor da pílula de confiança conforme valor
+        if conf_value >= 80:
+            conf_color = COLORS["success"]
+        elif conf_value >= 60:
+            conf_color = COLORS["warning"] if "warning" in COLORS else "#e6b800"
+        else:
+            conf_color = COLORS["accent"]
+
+        # Atualiza elementos visuais
+        self.result_pill.configure(text=f"Resultado: {display_text}", fg_color=pill_color)
+        self.conf_pill.configure(
+            text=f"Confiança: {conf_value:.1f}%", fg_color=conf_color
+        )
+
 
 class HomeScreen(ctk.CTkFrame):
     """Tela principal otimizada para 800x480"""

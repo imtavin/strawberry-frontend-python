@@ -4,7 +4,10 @@ import traceback
 from ui.app import FrontendApp 
 from utils.logger import frontend_logger, log_frontend_start
 
-CONFIG_PATH = "config.json"
+from pathlib import Path
+
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
+
 
 DEFAULTS = {
     "video": {
