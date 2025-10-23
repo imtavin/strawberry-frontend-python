@@ -13,13 +13,8 @@ class SettingsScreen(ctk.CTkFrame):
         self.on_save = on_save
         self.raspberry_info = {}
         
-        # Acessar configurações
-        if hasattr(master, 'master') and hasattr(master.master, 'config'):
-            self.config_dict = master.master.config
-        else:
-            self.config_dict = {}
-            ui_logger.warning("Não foi possível acessar as configurações do app principal")
-        
+        # Acessar configurações do app principal
+        self.config_dict = self._get_app_config()
         self.keyboard_window = None
         
         # Botão voltar 
@@ -38,6 +33,20 @@ class SettingsScreen(ctk.CTkFrame):
         self.back_btn.place(relx=0.02, rely=0.02, anchor="nw")
         
         self._build_ui()
+
+    def _get_app_config(self):
+        """Obtém configurações do app principal de forma segura"""
+        try:
+            # Navega até o app principal
+            app = self.master
+            while hasattr(app, 'master') and app.master:
+                app = app.master
+                if hasattr(app, 'config'):
+                    return app.config
+            return {}
+        except Exception as e:
+            ui_logger.warning(f"Não foi possível acessar configurações: {e}")
+            return {}
 
     def _build_ui(self):
         # Container principal com scroll
@@ -138,7 +147,7 @@ class SettingsScreen(ctk.CTkFrame):
             text="Copiar",
             width=60,
             height=24,
-            command=lambda: self._copy_ip_to_clipboard("private"),
+            command=self._copy_ip_to_clipboard,
             fg_color=COLORS["neutral"],
             hover_color=COLORS["neutral_hover"],
             font=FONTS["body_small"]
@@ -177,7 +186,7 @@ class SettingsScreen(ctk.CTkFrame):
         default_transport = video_config.get("transport", "tcp")
         
         self.transport_var = ctk.StringVar(value=default_transport)
-        transport_combo = ctk.CTkComboBox(
+        self.transport_combo = ctk.CTkComboBox(
             transport_frame,
             values=["tcp", "udp"],
             variable=self.transport_var,
@@ -190,7 +199,7 @@ class SettingsScreen(ctk.CTkFrame):
             dropdown_fg_color=COLORS["panel"],
             dropdown_hover_color=COLORS["pill"]
         )
-        transport_combo.pack(side="right")
+        self.transport_combo.pack(side="right")
 
     def _build_wifi_section(self):
         """Seção de configuração Wi-Fi"""
@@ -354,7 +363,7 @@ class SettingsScreen(ctk.CTkFrame):
         default_fps = camera_config.get("target_fps", 15)
         
         self.fps_var = ctk.StringVar(value=str(default_fps))
-        fps_combo = ctk.CTkComboBox(
+        self.fps_combo = ctk.CTkComboBox(
             fps_frame,
             values=["10", "15", "20", "25", "30"],
             variable=self.fps_var,
@@ -365,7 +374,7 @@ class SettingsScreen(ctk.CTkFrame):
             border_color=COLORS["border"],
             button_color=COLORS["neutral"]
         )
-        fps_combo.pack(side="right")
+        self.fps_combo.pack(side="right")
 
     def _build_system_section(self):
         """Seção de sistema"""
@@ -472,7 +481,7 @@ class SettingsScreen(ctk.CTkFrame):
         except Exception as e:
             ui_logger.error(f"Erro ao atualizar informações da Raspberry na UI: {e}")
 
-    def _copy_ip_to_clipboard(self, ip_type: str):
+    def _copy_ip_to_clipboard(self, ip_type: str = "private"):
         """Copia o IP para a área de transferência"""
         try:
             ip = self.raspberry_info.get('private_ip', '')
@@ -495,38 +504,56 @@ class SettingsScreen(ctk.CTkFrame):
             self._show_wifi_status("Por favor, digite o nome da rede", False)
             return
             
-        # Enviar comando para o backend
-        command = f"WIFI_CONNECT:{ssid}:{password}"
-        
-        if hasattr(self.master, 'tcp_client'):
-            self.master.tcp_client.send(command.encode('utf-8'))
-            self._show_wifi_status("Conectando...", None)
-        else:
-            ui_logger.error("TCP client não disponível")
-            self._show_wifi_status("Erro: Sem conexão", False)
+        # Enviar comando para o backend via command handler
+        try:
+            app = self._get_app_instance()
+            if hasattr(app, 'commands') and hasattr(app.commands, 'send_wifi_connect'):
+                # Usar command handler se disponível
+                app.commands.send_wifi_connect(ssid, password)
+                self._show_wifi_status("Conectando...", None)
+                ui_logger.info(f"Tentando conectar ao Wi-Fi: {ssid}")
+            elif hasattr(app, 'tcp_client'):
+                # Fallback: enviar comando direto via TCP
+                command = f"WIFI_CONNECT:{ssid}:{password}"
+                app.tcp_client.send(command.encode('utf-8'))
+                self._show_wifi_status("Conectando...", None)
+            else:
+                ui_logger.error("Nenhum método de conexão disponível")
+                self._show_wifi_status("Erro: Sistema indisponível", False)
+                
+        except Exception as e:
+            ui_logger.error(f"Erro ao conectar Wi-Fi: {e}")
+            self._show_wifi_status(f"Erro: {str(e)}", False)
 
     def _show_wifi_status(self, status: str, success: bool = None):
         """Mostra status da conexão Wi-Fi"""
-        self.wifi_status_label.configure(text=status)
+        def update_ui():
+            self.wifi_status_label.configure(text=status)
+            
+            if success is True:
+                self.wifi_status_label.configure(text_color=COLORS["success"])
+                # Limpar campos em caso de sucesso
+                self.ssid_var.set("")
+                self.password_var.set("")
+            elif success is False:
+                self.wifi_status_label.configure(text_color=COLORS["accent"])
+            else:
+                self.wifi_status_label.configure(text_color=COLORS["text_secondary"])
         
-        if success is True:
-            self.wifi_status_label.configure(text_color=COLORS["success"])
-            self.ssid_var.set("")
-            self.password_var.set("")
-        elif success is False:
-            self.wifi_status_label.configure(text_color=COLORS["accent"])
-        else:
-            self.wifi_status_label.configure(text_color=COLORS["text_secondary"])
+        self.after(0, update_ui)
 
     def _restart_service(self):
         """Reinicia o serviço da aplicação"""
         def restart():
             try:
                 ui_logger.info("Reiniciando serviço...")
-                if hasattr(self.master, 'tcp_client'):
-                    self.master.tcp_client.send("RESTART_SERVICE".encode('utf-8'))
+                app = self._get_app_instance()
+                if hasattr(app, 'commands') and hasattr(app.commands, 'send_restart_service'):
+                    app.commands.send_restart_service()
+                elif hasattr(app, 'tcp_client'):
+                    app.tcp_client.send("RESTART_SERVICE".encode('utf-8'))
                 else:
-                    ui_logger.error("TCP client não disponível")
+                    ui_logger.error("Nenhum método de reinício disponível")
             except Exception as e:
                 ui_logger.error(f"Erro ao enviar comando de reinício: {e}")
         
@@ -535,34 +562,77 @@ class SettingsScreen(ctk.CTkFrame):
     def _show_system_logs(self):
         """Mostra logs do sistema"""
         try:
-            if hasattr(self.master, 'tcp_client'):
-                self.master.tcp_client.send("SHOW_LOGS".encode('utf-8'))
+            app = self._get_app_instance()
+            if hasattr(app, 'commands') and hasattr(app.commands, 'send_show_logs'):
+                app.commands.send_show_logs()
+            elif hasattr(app, 'tcp_client'):
+                app.tcp_client.send("SHOW_LOGS".encode('utf-8'))
             else:
-                ui_logger.error("TCP client não disponível")
+                ui_logger.error("Nenhum método para logs disponível")
         except Exception as e:
             ui_logger.error(f"Erro ao solicitar logs: {e}")
 
+    def _get_app_instance(self):
+        """Obtém a instância do app principal de forma segura"""
+        try:
+            app = self.master
+            while hasattr(app, 'master') and app.master:
+                app = app.master
+                if hasattr(app, 'commands') or hasattr(app, 'tcp_client'):
+                    return app
+            return self.master
+        except Exception as e:
+            ui_logger.error(f"Erro ao obter app instance: {e}")
+            return self.master
+
     def _on_save(self):
         """Salva as configurações permanentemente"""
-        new_settings = {
-            "video": {
-                "transport": self.transport_var.get()
-            },
-            "camera": {
-                "target_fps": int(self.fps_var.get())
+        try:
+            new_settings = {
+                "video": {
+                    "transport": self.transport_var.get()
+                },
+                "camera": {
+                    "target_fps": int(self.fps_var.get())
+                }
             }
-        }
-        
-        if callable(self.on_save):
-            self.on_save(new_settings)
-            ui_logger.info("Configurações salvas com sucesso")
+            
+            if callable(self.on_save):
+                self.on_save(new_settings)
+                ui_logger.info("Configurações salvas com sucesso")
+                self._show_wifi_status("Configurações salvas com sucesso!", True)
+            else:
+                ui_logger.error("Callback on_save não disponível")
+                
+        except Exception as e:
+            ui_logger.error(f"Erro ao salvar configurações: {e}")
+            self._show_wifi_status(f"Erro ao salvar: {str(e)}", False)
 
     def _on_apply(self):
         """Aplica as configurações sem salvar permanentemente"""
+        # Por enquanto, aplica e salva (pode ser modificado para só aplicar)
         self._on_save()
 
     def _on_back(self):
         """Volta para a tela anterior"""
         if self.keyboard_window and self.keyboard_window.winfo_exists():
             self.keyboard_window.destroy()
-        self.master.show_screen("home")
+        
+        # Navegar para home através do app principal
+        try:
+            app = self._get_app_instance()
+            if hasattr(app, 'show_screen'):
+                app.show_screen("home")
+        except Exception as e:
+            ui_logger.error(f"Erro ao voltar para home: {e}")
+
+    def on_show(self):
+        """Chamado quando a tela é mostrada - atualiza informações"""
+        try:
+            # Solicitar informações atualizadas da Raspberry
+            app = self._get_app_instance()
+            if hasattr(app, 'tcp_client'):
+                app.tcp_client.send("GET_INFO".encode('utf-8'))
+                ui_logger.debug("Solicitando informações atualizadas da Raspberry")
+        except Exception as e:
+            ui_logger.debug(f"Erro ao solicitar info na exibição: {e}")
