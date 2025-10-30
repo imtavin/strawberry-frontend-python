@@ -12,11 +12,14 @@ class ConnectionState(Enum):
     ERROR = "error"
 
 class TCPClient:
-    def __init__(self, host, port, reconnect_delay=2):
+    def __init__(self, host, port, reconnect_delay=2, max_reconnect_attempts=5):
         self.host = host
         self.port = port
         self.sock: Optional[socket.socket] = None
         self.reconnect_delay = reconnect_delay
+        self.reconnect_delay = reconnect_delay
+        self.max_reconnect_attempts = max_reconnect_attempts
+        self.reconnect_attempts = 0
         self._connected = False
         self._message_handlers: list[Callable] = []
         network_logger.debug(f"TCPClient inicializado: {host}:{port}")
@@ -53,6 +56,25 @@ class TCPClient:
             
             network_logger.info(f"Tentando novamente em {self.reconnect_delay}s...")
             time.sleep(self.reconnect_delay)
+
+    def ensure_connection(self):
+        """Garante que há uma conexão ativa"""
+        if not self._connected or not self.sock:
+            return self.connect_with_retry()
+        return True
+
+    def connect_with_retry(self):
+        """Tenta conectar com múltiplas tentativas"""
+        while self.reconnect_attempts < self.max_reconnect_attempts:
+            try:
+                self.connect()
+                self.reconnect_attempts = 0
+                return True
+            except Exception as e:
+                self.reconnect_attempts += 1
+                network_logger.warning(f"Tentativa {self.reconnect_attempts}/{self.max_reconnect_attempts} falhou: {e}")
+                time.sleep(self.reconnect_delay)
+        return False
 
     def send(self, data: bytes):
         """Envia dados via TCP"""

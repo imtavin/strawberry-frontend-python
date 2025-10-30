@@ -6,6 +6,12 @@ from utils.logger import frontend_logger, log_frontend_start
 
 from pathlib import Path
 
+import sys
+import io
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.json"
 
 

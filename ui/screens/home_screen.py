@@ -1,5 +1,6 @@
 # ui/screens/home_screen.py
 import customtkinter as ctk
+from customtkinter import CTkImage
 from PIL import Image, ImageTk
 from typing import Callable, Optional
 from ui.icons import COLORS, FONTS, ICONS
@@ -80,10 +81,11 @@ class VideoState(ctk.CTkFrame):
                 new_height = int(container_width / img_ratio)
             
             resized_image = pil_image.resize((new_width, new_height), Image.LANCZOS)
-            imgtk = ImageTk.PhotoImage(resized_image)
+
+            ctk_img = CTkImage(light_image=resized_image, size=(new_width, new_height))
             
-            self.video_label.configure(image=imgtk, text="")
-            self.video_label.image = imgtk
+            self.video_label.configure(image=ctk_img, text="")
+            self.video_label.image = ctk_img
             
         except Exception as e:
             print("Falha ao atualizar frame:", e)
