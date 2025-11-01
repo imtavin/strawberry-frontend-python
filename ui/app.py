@@ -23,7 +23,7 @@ from ui.screens.settings_screen import SettingsScreen
 # Importar loggers
 from utils.logger import ui_logger, network_logger, video_logger, command_logger
 
-CAPTURES_DIR = os.path.join(os.path.dirname(__file__), "..", "capture")
+CAPTURES_DIR = os.path.join(os.path.dirname(__file__), "..", "backend/capture")
 CAPTURES_DIR = os.path.abspath(CAPTURES_DIR)
 
 class FrontendApp(ctk.CTk):
