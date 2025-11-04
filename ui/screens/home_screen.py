@@ -245,11 +245,11 @@ class ResultState(ctk.CTkFrame):
 
         # Define texto e cor do resultado
         if label in ["unknown", "não identificado", "nao identificado", ""]:
-            display_text = "🚫 Não identificado"
-            pill_color = COLORS["pill_dark"]
+            display_text = "Não identificado"
+            pill_color = "#4FC3F7"
         else:
-            display_text = f"🌿 {text.capitalize()}"
-            pill_color = COLORS["pill"]
+            display_text = f"{text.capitalize()}"
+            pill_color = "#4FC3F7"
 
         # Define cor da pílula de confiança conforme valor
         if conf_value >= 80:

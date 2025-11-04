@@ -23,8 +23,8 @@ from ui.screens.settings_screen import SettingsScreen
 # Importar loggers
 from utils.logger import ui_logger, network_logger, video_logger, command_logger
 
-CAPTURES_DIR = os.path.join(os.path.dirname(__file__), "..", "backend/capture")
-CAPTURES_DIR = os.path.abspath(CAPTURES_DIR)
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+CAPTURES_DIR = os.path.join(BASE_DIR, "backend", "capture")
 
 class FrontendApp(ctk.CTk):
     """
@@ -282,7 +282,7 @@ class FrontendApp(ctk.CTk):
                     try:
                         data = self.tcp_client.sock.recv(1024)
                         if data:
-                            # 🔥 CORREÇÃO: Processar cada linha recebida
+                            # CORREÇÃO: Processar cada linha recebida
                             received_data = data.decode('utf-8').strip()
                             
                             # Dividir por linhas caso receba múltiplas mensagens
@@ -324,7 +324,7 @@ class FrontendApp(ctk.CTk):
                 
                 # Resultado de inferência
                 elif "label" in data and "confidence" in data:
-                    label = data.get("label", "Indeterminado")
+                    label = data.get("label_pt", "Indeterminado")
                     conf = data.get("confidence", 0)
                     self._on_analysis_result({"label": label, "confidence": conf})
                     return
