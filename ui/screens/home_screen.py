@@ -14,6 +14,11 @@ class VideoState(ctk.CTkFrame):
         super().__init__(parent, fg_color=COLORS["panel_light"], *args, **kwargs)
         self.on_capture = on_capture
         self.current_image = None
+        
+        # Configurar grid para expansão
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        
         self._build_ui()
 
     def _build_ui(self):
@@ -25,7 +30,9 @@ class VideoState(ctk.CTkFrame):
             border_width=1,
             border_color=COLORS["pill_dark"]
         )
-        self.video_container.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.98, relheight=0.98)
+        self.video_container.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        self.video_container.grid_rowconfigure(0, weight=1)
+        self.video_container.grid_columnconfigure(0, weight=1)
         
         # Label do vídeo que ocupa todo o container
         self.video_label = ctk.CTkLabel(
@@ -36,9 +43,9 @@ class VideoState(ctk.CTkFrame):
             text_color=COLORS["text_secondary"],
             font=FONTS["body"]
         )
-        self.video_label.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.99, relheight=0.99)
+        self.video_label.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
         
-        # Botão de captura SOBREPOSTO no canto inferior direito
+        # Botão de captura SOBREPOSTO - usar place apenas para este botão flutuante
         self.capture_btn = CaptureButton(
             self.video_container, 
             command=self._on_click_capture
@@ -105,15 +112,23 @@ class LoadingState(ctk.CTkFrame):
     def __init__(self, parent, on_back: Callable = None, *args, **kwargs):
         super().__init__(parent, fg_color=COLORS["panel_light"], *args, **kwargs)
         self.on_back = on_back
+        
+        # Configurar grid
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        
         self._build_ui()
 
     def _build_ui(self):
-        container = ctk.CTkFrame(self, fg_color="transparent")
-        container.place(relx=0.5, rely=0.5, anchor="center")
+        # Frame principal para centralizar
+        main_frame = ctk.CTkFrame(self, fg_color="transparent")
+        main_frame.grid(row=0, column=0, sticky="nsew")
+        main_frame.grid_rowconfigure(1, weight=1)
+        main_frame.grid_columnconfigure(0, weight=1)
         
-        # Botão voltar no canto superior esquerdo
+        # Botão voltar no canto superior esquerdo DO ESTADO ATUAL
         self.back_btn = ctk.CTkButton(
-            self,
+            main_frame,  # Agora no main_frame, não no self
             text="← Voltar",
             width=80,
             height=32,
@@ -124,7 +139,11 @@ class LoadingState(ctk.CTkFrame):
             font=FONTS["body"],
             command=self._on_back
         )
-        self.back_btn.place(relx=0.02, rely=0.03, anchor="nw")
+        self.back_btn.grid(row=0, column=0, sticky="nw", padx=10, pady=10)
+        
+        # Container de conteúdo centralizado
+        container = ctk.CTkFrame(main_frame, fg_color="transparent")
+        container.grid(row=1, column=0, sticky="")
         
         # Ícone de loading menor
         strawberry_icon = ICONS["strawberry"]((48, 48))
@@ -171,15 +190,23 @@ class ResultState(ctk.CTkFrame):
     def __init__(self, parent, on_back: Callable = None, *args, **kwargs):
         super().__init__(parent, fg_color=COLORS["panel_light"], *args, **kwargs)
         self.on_back = on_back
+        
+        # Configurar grid
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        
         self._build_ui()
 
     def _build_ui(self):
-        main_container = ctk.CTkFrame(self, fg_color="transparent")
-        main_container.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.95, relheight=0.85)
+        # Frame principal
+        main_frame = ctk.CTkFrame(self, fg_color="transparent")
+        main_frame.grid(row=0, column=0, sticky="nsew")
+        main_frame.grid_rowconfigure(1, weight=1)
+        main_frame.grid_columnconfigure(0, weight=1)
         
         # Botão voltar no canto superior esquerdo
         self.back_btn = ctk.CTkButton(
-            self,
+            main_frame,  # Correção: no main_frame
             text="← Voltar",
             width=80,
             height=32,
@@ -190,12 +217,12 @@ class ResultState(ctk.CTkFrame):
             font=FONTS["body"],
             command=self._on_back
         )
-        self.back_btn.place(relx=0.02, rely=0.03, anchor="nw")
-
-        # Container do resultado compacto
-        result_container = ctk.CTkFrame(main_container, fg_color="transparent")
-        result_container.pack(fill="both", expand=True)
+        self.back_btn.grid(row=0, column=0, sticky="nw", padx=10, pady=10)
         
+        # Container do resultado
+        result_container = ctk.CTkFrame(main_frame, fg_color="transparent")
+        result_container.grid(row=1, column=0, sticky="nsew")
+
         # Ícone de resultado menor
         result_icon = ICONS["strawberry"]((60, 60))
         if result_icon:
@@ -272,26 +299,33 @@ class HomeScreen(ctk.CTkFrame):
     def __init__(self, master, on_capture: Callable, *args, **kwargs):
         super().__init__(master, fg_color=COLORS["panel"], corner_radius=16, *args, **kwargs)
         
-        # Frame interno mais compacto
+        # Configurar grid para expansão correta
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        
+        # Frame interno com dimensions otimizadas para 800x480
         self.inner = ctk.CTkFrame(
             self, 
             fg_color=COLORS["panel_light"], 
             corner_radius=12
         )
-        self.inner.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.98, relheight=0.96)
+        self.inner.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        self.inner.grid_rowconfigure(0, weight=1)
+        self.inner.grid_columnconfigure(0, weight=1)
         
-        # Widget de bateria menor no canto
-        self.battery = BatteryWidget(self.inner, percentage=82)
-        self.battery.place(relx=0.96, rely=0.03, anchor="ne")
+        # # Widget de bateria no canto 
+        # self.battery = BatteryWidget(self, percentage=82) 
+        # self.battery.place(relx=0.98, rely=0.02, anchor="ne")
 
-        # Estados
+        # Estados 
         self.video_state = VideoState(self.inner, on_capture=on_capture)
         self.loading_state = LoadingState(self.inner, on_back=lambda: self.show_state("video"))
         self.result_state = ResultState(self.inner, on_back=lambda: self.show_state("video"))
 
-        # Posicionar estados
-        for state in [self.video_state, self.loading_state, self.result_state]:
-            state.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.98, relheight=0.98)
+        # Posicionar estados 
+        self.video_state.grid(row=0, column=0, sticky="nsew")
+        self.loading_state.grid(row=0, column=0, sticky="nsew") 
+        self.result_state.grid(row=0, column=0, sticky="nsew")
 
         self.states = {
             "video": self.video_state,
@@ -304,10 +338,11 @@ class HomeScreen(ctk.CTkFrame):
     def show_state(self, state_name: str):
         """Mostra um estado específico"""
         for state in self.states.values():
-            state.lower()
+            state.grid_remove()  # Remove do grid
         
         if state_name in self.states:
-            self.states[state_name].lift()
+            self.states[state_name].grid()  # Mostra no grid
+            self.states[state_name].lift()  # Traz para frente
 
     def update_frame(self, pil_image):
         """Atualiza frame de vídeo"""

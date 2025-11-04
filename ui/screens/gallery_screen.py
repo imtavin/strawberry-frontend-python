@@ -9,7 +9,11 @@ class GalleryScreen(ctk.CTkFrame):
         super().__init__(master, fg_color=COLORS["panel"], corner_radius=16, *args, **kwargs)
         self.captures_dir = captures_dir
         
-        # Botão voltar
+        # Configurar grid principal
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        
+        # Botão voltar NO TOPO - usando grid
         self.back_btn = ctk.CTkButton(
             self,
             text="← Voltar",
@@ -22,18 +26,20 @@ class GalleryScreen(ctk.CTkFrame):
             font=FONTS["body"],
             command=self._on_back
         )
-        self.back_btn.place(relx=0.02, rely=0.03, anchor="nw")
+        self.back_btn.grid(row=0, column=0, sticky="nw", padx=10, pady=10)
         
         self._build_ui()
 
     def _on_back(self):
-        # Voltar para home (será conectado no app principal)
+        # O comando será configurado pelo FrontendApp
         pass
 
     def _build_ui(self):
-        # Container principal
+        # Container principal - usando grid
         self.container = ctk.CTkFrame(self, fg_color=COLORS["bg"], corner_radius=12)
-        self.container.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.96, relheight=0.9)
+        self.container.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.container.grid_rowconfigure(1, weight=1)
+        self.container.grid_columnconfigure(0, weight=1)
         
         # Título
         title = ctk.CTkLabel(
@@ -42,14 +48,14 @@ class GalleryScreen(ctk.CTkFrame):
             text_color=COLORS["text"],
             font=FONTS["title"]
         )
-        title.pack(pady=10)
+        title.grid(row=0, column=0, pady=10, sticky="n")
         
         # Frame para as imagens
         self.images_frame = ctk.CTkScrollableFrame(
             self.container, 
             fg_color=COLORS["bg"]
         )
-        self.images_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        self.images_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
         
         self._build_grid()
 

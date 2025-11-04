@@ -13,11 +13,15 @@ class SettingsScreen(ctk.CTkFrame):
         self.on_save = on_save
         self.raspberry_info = {}
         
+        # Configurar grid principal
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        
         # Acessar configurações do app principal
         self.config_dict = self._get_app_config()
         self.keyboard_window = None
         
-        # Botão voltar 
+        # Botão voltar NO TOPO - usando grid
         self.back_btn = ctk.CTkButton(
             self,
             text="← Voltar",
@@ -30,7 +34,7 @@ class SettingsScreen(ctk.CTkFrame):
             font=FONTS["body_small"],
             command=self._on_back
         )
-        self.back_btn.place(relx=0.02, rely=0.02, anchor="nw")
+        self.back_btn.grid(row=0, column=0, sticky="nw", padx=10, pady=10)
         
         self._build_ui()
 
@@ -49,7 +53,7 @@ class SettingsScreen(ctk.CTkFrame):
             return {}
 
     def _build_ui(self):
-        # Container principal com scroll
+        # Container principal com scroll - usando grid
         self.main_container = ctk.CTkScrollableFrame(
             self, 
             fg_color=COLORS["bg"], 
@@ -57,7 +61,7 @@ class SettingsScreen(ctk.CTkFrame):
             scrollbar_button_color=COLORS["neutral"],
             scrollbar_button_hover_color=COLORS["neutral_hover"]
         )
-        self.main_container.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.96, relheight=0.94)
+        self.main_container.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
         
         # ===== SEÇÃO: INFORMAÇÕES DO SISTEMA =====
         self._build_system_info_section()

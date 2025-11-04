@@ -51,6 +51,8 @@ class FrontendApp(ctk.CTk):
         self.running = True
         self.current_capture_filename = None
 
+        self.screens = {}  # Dicionário de telas
+
         # Setup do backend (TCP/UDP + vídeo)
         self._setup_backend()
 
@@ -148,16 +150,11 @@ class FrontendApp(ctk.CTk):
         )
         self.sidebar.grid(row=0, column=0, sticky="ns")
 
-        # Área de conteúdo principal
+        # Área de conteúdo principal - CORRIGIR PADDING
         self.content = ctk.CTkFrame(self, fg_color=COLORS["panel"], corner_radius=12)
-        self.content.grid(row=0, column=1, sticky="nsew", padx=WINDOW_PADDING, pady=WINDOW_PADDING)
+        self.content.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)  # Reduzir padding
         self.content.grid_rowconfigure(0, weight=1)
         self.content.grid_columnconfigure(0, weight=1)
-
-        # Dicionário de screens
-        self.screens = {}
-        
-        ui_logger.debug("UI configurada com sucesso")
 
     def _register_screens(self):
         """Registra todas as telas da aplicação"""
@@ -167,25 +164,22 @@ class FrontendApp(ctk.CTk):
         home_screen = HomeScreen(self.content, on_capture=self._on_capture_requested)
         self._register_screen("home", home_screen)
 
-        # Gallery screen
+        # Gallery screen  
         gallery_screen = GalleryScreen(self.content, captures_dir=CAPTURES_DIR)
-        if hasattr(gallery_screen, "back_btn"):
-            gallery_screen.back_btn.configure(command=self._on_home)
+        gallery_screen.back_btn.configure(command=self._on_home)
         self._register_screen("gallery", gallery_screen)
 
-        # Map screen
+        # Map screen 
         map_screen = MapScreen(self.content)
-        if hasattr(map_screen, "back_btn"):
-            map_screen.back_btn.configure(command=self._on_home)
+        map_screen.back_btn.configure(command=self._on_home)
         self._register_screen("map", map_screen)
 
-        # Settings screen
+        # Settings screen 
         settings_screen = SettingsScreen(
             self.content,
             on_save=self._on_settings_save
-            )
-        if hasattr(settings_screen, "back_btn"):
-            settings_screen.back_btn.configure(command=self._on_home)
+        )
+        # O SettingsScreen já tem seu próprio _on_back configurado
         self._register_screen("settings", settings_screen)
 
         # Mostrar tela inicial
@@ -194,20 +188,24 @@ class FrontendApp(ctk.CTk):
         ui_logger.info("Todas as telas registradas")
 
     def _register_screen(self, name: str, screen):
-        """Registra uma tela no gerenciador"""
+        """Registra uma tela no gerenciador - CORRIGIDO"""
         screen.grid(row=0, column=0, sticky="nsew")
         self.screens[name] = screen
-        screen.lower()
+        screen.grid_remove()  # Esconder inicialmente
         
         ui_logger.debug(f"Tela registrada: {name}")
 
     def show_screen(self, name: str):
-        """Mostra uma tela específica"""
+        """Mostra uma tela específica - CORRIGIDO"""
         ui_logger.debug(f"Alternando para tela: {name}")
         
-        for _, screen in self.screens.items():
-            screen.lower()
+        # Esconder todas as telas
+        for screen_name, screen in self.screens.items():
+            screen.grid_remove()
+        
+        # Mostrar tela solicitada
         if name in self.screens:
+            self.screens[name].grid()
             self.screens[name].lift()
             ui_logger.info(f"Tela ativa: {name}")
 
