@@ -19,6 +19,7 @@ from ui.screens.home_screen import HomeScreen
 from ui.screens.gallery_screen import GalleryScreen
 from ui.screens.map_screen import MapScreen
 from ui.screens.settings_screen import SettingsScreen
+from ui.screens.logs_screen import LogsScreen
 
 # Importar loggers
 from utils.logger import ui_logger, network_logger, video_logger, command_logger
@@ -181,6 +182,10 @@ class FrontendApp(ctk.CTk):
         )
         # O SettingsScreen já tem seu próprio _on_back configurado
         self._register_screen("settings", settings_screen)
+
+        # Logs screen
+        logs_screen = LogsScreen(self.content)
+        self._register_screen("logs", logs_screen)
 
         # Mostrar tela inicial
         self.show_screen("home")
@@ -388,9 +393,96 @@ class FrontendApp(ctk.CTk):
 
     def _process_logs_response(self, result_str: str):
         """Processa resposta legada de logs"""
-        log_content = result_str[5:]
-        ui_logger.info(f"Logs recebidos: {len(log_content)} caracteres")
-        # Aqui você pode exibir os logs em uma tela específica
+        try:
+            # Remove o prefixo "LOGS:" 
+            if result_str.startswith('LOGS:'):
+                log_content = result_str[5:]
+            else:
+                log_content = result_str
+                
+            ui_logger.info(f"Logs recebidos: {len(log_content)} caracteres")
+            
+            # Verifica se é uma mensagem de erro
+            if "erro" in log_content.lower() or "nenhum log" in log_content.lower():
+                ui_logger.warning(f"Resposta de logs com problema: {log_content[:100]}...")
+            
+            # Abre o diálogo de logs na thread principal
+            self.after(0, lambda: self._open_logs_dialog(log_content))
+            
+        except Exception as e:
+            ui_logger.error(f"Erro processando resposta de logs: {e}")
+            self.after(0, lambda: self._open_logs_dialog(f"Erro ao processar logs: {str(e)}"))
+
+    def _open_logs_dialog(self, logs_content: str):
+        """Abre o diálogo de logs com o conteúdo recebido"""
+        try:
+            from ui.components.logs_dialog import LogsDialog
+            
+            # Verifica se já existe um diálogo aberto
+            if hasattr(self, '_logs_dialog') and self._logs_dialog and self._logs_dialog.winfo_exists():
+                # Atualiza o conteúdo existente
+                self._logs_dialog.set_logs(logs_content)
+                self._logs_dialog.lift()
+                return
+            
+            # Cria novo diálogo
+            self._logs_dialog = LogsDialog(
+                parent=self,
+                title="Logs do Sistema",
+                initial_logs=logs_content,
+                on_refresh=self._refresh_logs  # Callback para atualizar
+            )
+            
+            # Configura o protocolo de fechamento
+            def on_close():
+                self._logs_dialog = None
+                
+            self._logs_dialog.protocol("WM_DELETE_WINDOW", on_close)
+            self._logs_dialog.show()
+            
+            ui_logger.info("Diálogo de logs aberto com sucesso")
+            
+        except Exception as e:
+            ui_logger.error(f"Erro ao abrir diálogo de logs: {e}")
+            # Fallback: mostra em messagebox
+            import tkinter.messagebox as messagebox
+            messagebox.showerror("Erro", f"Não foi possível abrir os logs: {str(e)}")
+
+    def _refresh_logs(self):
+        """Callback para atualizar logs - chamado pelo diálogo"""
+        try:
+            ui_logger.info("Atualizando logs...")
+            # Reenvia comando para obter logs atualizados
+            if hasattr(self.commands, 'send_show_logs'):
+                # Usa callback para atualizar o diálogo existente
+                self.commands.send_show_logs(
+                    lines=50, 
+                    callback=self._on_logs_refreshed
+                )
+            else:
+                # Fallback: envia comando direto
+                self.tcp_client.send("SHOW_LOGS".encode('utf-8'))
+                
+        except Exception as e:
+            ui_logger.error(f"Erro ao atualizar logs: {e}")
+
+    def _on_logs_refreshed(self, success: bool, message: str, data: dict):
+        """Callback quando logs são atualizados"""
+        try:
+            if success and hasattr(self, '_logs_dialog') and self._logs_dialog and self._logs_dialog.winfo_exists():
+                # Extrai logs dos dados (formato JSON) ou usa message
+                if data and 'logs' in data:
+                    logs_content = data['logs']
+                else:
+                    logs_content = message
+                    
+                self._logs_dialog.set_logs(logs_content, "Sistema (Atualizado)")
+                ui_logger.info("Logs atualizados no diálogo")
+            else:
+                ui_logger.warning(f"Falha ao atualizar logs: {message}")
+                
+        except Exception as e:
+            ui_logger.error(f"Erro ao processar atualização de logs: {e}")
 
     def _process_legacy_result(self, result_str: str):
         """Processa resultado no formato legado"""

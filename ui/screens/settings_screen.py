@@ -564,17 +564,27 @@ class SettingsScreen(ctk.CTkFrame):
         threading.Thread(target=restart, daemon=True).start()
 
     def _show_system_logs(self):
-        """Mostra logs do sistema"""
+        """Navega para a tela de logs"""
         try:
             app = self._get_app_instance()
-            if hasattr(app, 'commands') and hasattr(app.commands, 'send_show_logs'):
-                app.commands.send_show_logs()
-            elif hasattr(app, 'tcp_client'):
-                app.tcp_client.send("SHOW_LOGS".encode('utf-8'))
-            else:
-                ui_logger.error("Nenhum método para logs disponível")
+            if hasattr(app, 'show_screen'):
+                app.show_screen("logs")
+                ui_logger.info("Navegando para tela de logs")
         except Exception as e:
-            ui_logger.error(f"Erro ao solicitar logs: {e}")
+            ui_logger.error(f"Erro ao navegar para logs: {e}")
+            self._show_error_message(f"Erro: {str(e)}")
+            
+    def _show_error_message(self, message: str):
+        """Mostra mensagem de erro temporária"""
+        try:
+            # Feedback visual temporário
+            original_text = self.wifi_status_label.cget("text")
+            self.wifi_status_label.configure(text=message, text_color=COLORS["accent"])
+            self.after(5000, lambda: self.wifi_status_label.configure(
+                text=original_text, text_color=COLORS["text_secondary"]
+            ))
+        except Exception as e:
+            ui_logger.error(f"Erro ao mostrar mensagem: {e}")
 
     def _get_app_instance(self):
         """Obtém a instância do app principal de forma segura"""

@@ -56,11 +56,11 @@ class CommandHandler:
         return self._send_command("RESTART_SERVICE", {}, callback)
 
     def send_show_logs(self, lines: int = 50, callback: Optional[Callable] = None) -> str:
-        """Envia comando para visualizar logs"""
+        """Envia comando para visualizar logs - VERSÃO CORRIGIDA"""
         return self._send_command("SHOW_LOGS", {"lines": lines}, callback)
 
     def _send_command(self, command_name: str, data: Dict[str, Any], callback: Optional[Callable] = None) -> str:
-        """Envia comando genérico"""
+        """Envia comando genérico - VERSÃO CORRIGIDA"""
         command_id = self._generate_command_id()
         
         command = Command(
@@ -68,17 +68,18 @@ class CommandHandler:
             name=command_name,
             data=data,
             timestamp=time.time(),
-            callback=callback
+            callback=callback,
+            timeout=30.0
         )
         
         self.pending_commands[command_id] = command
         
-        # Constrói e envia o comando
+        # Constrói e envia o comando - CORREÇÃO PARA SHOW_LOGS
         try:
             if command_name == "WIFI_CONNECT":
                 command_str = f"WIFI_CONNECT:{command_id}:{data['ssid']}:{data['password']}"
             elif command_name == "SHOW_LOGS":
-                command_str = f"SHOW_LOGS:{command_id}:{data['lines']}"
+                command_str = f"SHOW_LOGS:{command_id}:{data['lines']}"  # Inclui lines
             elif command_name == "RESTART_SERVICE":
                 command_str = f"RESTART_SERVICE:{command_id}"
             else:
@@ -87,9 +88,12 @@ class CommandHandler:
             self.tcp_client.send(command_str.encode('utf-8'))
             command_logger.info(f"Comando enviado: {command_name} (ID: {command_id})")
             
-            # Inicia thread de timeout
+            # Inicia thread de timeout APENAS se tiver callback
             if callback:
                 self.executor.submit(self._wait_for_response, command)
+            else:
+                # Para comandos sem callback, remove após timeout
+                self.executor.submit(self._cleanup_command, command)
             
         except Exception as e:
             command_logger.error(f"Erro enviando comando {command_name}: {e}")
@@ -99,6 +103,13 @@ class CommandHandler:
                 callback(False, f"Erro de envio: {e}", {})
         
         return command_id
+
+    def _cleanup_command(self, command: Command):
+        """Limpa comando após timeout quando não há callback"""
+        time.sleep(command.timeout)
+        if command.id in self.pending_commands:
+            command_logger.debug(f"Limpando comando sem callback: {command.name}")
+            del self.pending_commands[command.id]
 
     def _wait_for_response(self, command: Command):
         """Aguarda resposta ou timeout"""
