@@ -55,12 +55,12 @@ class CommandHandler:
         """Envia comando de reinicialização de serviço"""
         return self._send_command("RESTART_SERVICE", {}, callback)
 
-    def send_show_logs(self, lines: int = 50, callback: Optional[Callable] = None) -> str:
-        """Envia comando para visualizar logs - VERSÃO CORRIGIDA"""
-        return self._send_command("SHOW_LOGS", {"lines": lines}, callback)
+    def send_show_logs(self, lines: int = 50, log_type: str = "all", callback: Optional[Callable] = None) -> str:
+        """Envia comando para visualizar logs"""
+        return self._send_command("SHOW_LOGS", {"lines": lines, "log_type": log_type}, callback)
 
     def _send_command(self, command_name: str, data: Dict[str, Any], callback: Optional[Callable] = None) -> str:
-        """Envia comando genérico - VERSÃO CORRIGIDA"""
+        """Envia comando genérico - VERSÃO ATUALIZADA"""
         command_id = self._generate_command_id()
         
         command = Command(
@@ -74,12 +74,12 @@ class CommandHandler:
         
         self.pending_commands[command_id] = command
         
-        # Constrói e envia o comando - CORREÇÃO PARA SHOW_LOGS
+        # Constrói e envia o comando
         try:
             if command_name == "WIFI_CONNECT":
                 command_str = f"WIFI_CONNECT:{command_id}:{data['ssid']}:{data['password']}"
             elif command_name == "SHOW_LOGS":
-                command_str = f"SHOW_LOGS:{command_id}:{data['lines']}"  # Inclui lines
+                command_str = f"SHOW_LOGS:{command_id}:{data['lines']}:{data.get('log_type', 'all')}"
             elif command_name == "RESTART_SERVICE":
                 command_str = f"RESTART_SERVICE:{command_id}"
             else:

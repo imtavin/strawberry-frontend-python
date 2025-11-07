@@ -277,21 +277,23 @@ class FrontendApp(ctk.CTk):
         """Escuta resultados do backend via TCP"""
         network_logger.info("Iniciando listener de resultados TCP")
         
+        buffer = ""  # Adicionar buffer simples
         while self.running:
             try:
                 if self.tcp_client.sock:
-                    # Verificar se há dados disponíveis
                     self.tcp_client.sock.settimeout(1.0)
                     try:
-                        data = self.tcp_client.sock.recv(1024)
+                        data = self.tcp_client.sock.recv(65536)  # Buffer maior
                         if data:
-                            # CORREÇÃO: Processar cada linha recebida
-                            received_data = data.decode('utf-8').strip()
+                            received_text = data.decode('utf-8')
+                            buffer += received_text
                             
-                            # Dividir por linhas caso receba múltiplas mensagens
-                            for line in received_data.split('\n'):
-                                if line.strip():  # Ignorar linhas vazias
-                                    network_logger.debug(f"Dados recebidos: {line}")
+                            # Processar linhas completas
+                            while '\n' in buffer:
+                                line, buffer = buffer.split('\n', 1)
+                                line = line.strip()
+                                if line:
+                                    network_logger.debug(f"Dados recebidos: {line[:200]}...")
                                     self._process_backend_result(line)
                                     
                     except socket.timeout:
@@ -308,13 +310,31 @@ class FrontendApp(ctk.CTk):
     # ============================
     # Processamento de resultados
     # ============================
-    def _process_backend_result(self, result_str: str):
-        """Processa resultado do backend com suporte a JSON"""
+    def _safe_json_parse(self, json_str: str):
+        """Tenta parsear JSON de forma segura"""
         try:
-            # Tenta parsear como JSON primeiro
-            if result_str.strip().startswith('{') and result_str.strip().endswith('}'):
-                data = json.loads(result_str)
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            # Tenta recuperar JSON incompleto
+            if json_str.count('{') > json_str.count('}'):
+                # JSON incompleto - adicionar chave de fechamento
+                json_str += '}'
+                try:
+                    return json.loads(json_str)
+                except:
+                    pass
+            return None
+
+    def _process_backend_result(self, result_str: str):
+        """Processa resultado do backend"""
+        try:
+            result_str = result_str.strip()
+            if not result_str:
+                return
                 
+            # Tenta parsear como JSON primeiro
+            data = self._safe_json_parse(result_str)
+            if data:
                 # Resposta de comando
                 if data.get("type") == "COMMAND_RESPONSE":
                     self._handle_command_response(data)
@@ -327,12 +347,11 @@ class FrontendApp(ctk.CTk):
                 
                 # Resultado de inferência
                 elif "label" in data and "confidence" in data:
-                    label = data.get("label_pt", "Indeterminado")
+                    label = data.get("label_pt", data.get("label", "Indeterminado"))
                     conf = data.get("confidence", 0)
                     self._on_analysis_result({"label": label, "confidence": conf})
                     return
-
-            # Processamento de respostas legadas em texto
+            
             if result_str.startswith("WIFI:"):
                 self._process_wifi_response(result_str)
             elif result_str.startswith("SERVICE:"):
@@ -340,13 +359,8 @@ class FrontendApp(ctk.CTk):
             elif result_str.startswith("LOGS:"):
                 self._process_logs_response(result_str)
             else:
-                # Fallback para formato antigo
                 self._process_legacy_result(result_str)
         
-        except json.JSONDecodeError:
-            # Se não for JSON válido, tratar como string simples
-            command_logger.warning(f"Dados recebidos não são JSON válido: {result_str}")
-            self._process_legacy_result(result_str)
         except Exception as e:
             command_logger.error(f"Erro processando resultado: {e}")
 
@@ -688,10 +702,23 @@ class FrontendApp(ctk.CTk):
     # Encerramento
     # ============================
     def exit_app(self):
-        """Encerra aplicação corretamente"""
-        ui_logger.info("Encerrando aplicação frontend...")
+        """Encerra aplicação corretamente e solicita desligamento do sistema"""
+        ui_logger.info("Iniciando sequência de desligamento do sistema...")
         self.running = False
 
+        try:
+            # Enviar comando de desligamento para o backend
+            if hasattr(self, 'tcp_client') and self.tcp_client and self.tcp_client._connected:
+                ui_logger.info("Enviando comando de desligamento para o backend...")
+                self.tcp_client.send("SHUTDOWN_SYSTEM".encode('utf-8'))
+                
+                # Pequeno delay para garantir que o comando foi enviado
+                time.sleep(1)
+                
+        except Exception as e:
+            ui_logger.error(f"Erro ao enviar comando de desligamento: {e}")
+
+        # Limpeza normal da aplicação frontend
         try:
             if self.cleanup_worker:
                 self.cleanup_worker.stop(join=True, timeout=1.0)
@@ -713,7 +740,7 @@ class FrontendApp(ctk.CTk):
         except Exception as e:
             network_logger.error(f"Erro fechando cliente TCP: {e}")
 
-        ui_logger.info("Aplicação frontend encerrada")
+        ui_logger.info("Aplicação frontend encerrada - sistema será desligado")
         self.destroy()
 
     def run(self):

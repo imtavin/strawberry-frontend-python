@@ -43,7 +43,7 @@ class LogsScreen(ctk.CTkFrame):
         self.main_container.grid_rowconfigure(1, weight=1)
         self.main_container.grid_columnconfigure(0, weight=1)
         
-        # ===== HEADER COM CONTROLES =====
+       # ===== HEADER COM CONTROLES =====
         header_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
         header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         header_frame.grid_columnconfigure(1, weight=1)
@@ -60,6 +60,30 @@ class LogsScreen(ctk.CTkFrame):
         # Controles
         controls_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
         controls_frame.grid(row=0, column=1, sticky="e")
+        
+        # Seletor de tipo de log
+        log_type_label = ctk.CTkLabel(
+            controls_frame,
+            text="Tipo:",
+            text_color=COLORS["text_secondary"],
+            font=FONTS["body_small"]
+        )
+        log_type_label.pack(side="left", padx=(0, 5))
+        
+        self.log_type_var = ctk.StringVar(value="all")
+        self.log_type_combo = ctk.CTkComboBox(
+            controls_frame,
+            values=["all", "backend", "frontend", "kiosk", "metrics"],
+            variable=self.log_type_var,
+            width=120,
+            height=28,
+            state="readonly",
+            command=self._on_log_type_change,
+            fg_color=COLORS["pill"],
+            border_color=COLORS["border"],
+            button_color=COLORS["neutral"]
+        )
+        self.log_type_combo.pack(side="left", padx=(0, 10))
         
         # Auto-refresh
         self.auto_refresh_var = ctk.BooleanVar(value=False)
@@ -157,6 +181,10 @@ class LogsScreen(ctk.CTkFrame):
         )
         self.lines_label.pack(side="right")
 
+    def _on_log_type_change(self, *args):
+        """Callback quando o tipo de log é alterado"""
+        self._refresh_logs()
+
     def _setup_bindings(self):
         """Configura bindings para eventos"""
         # Bind para detectar scroll manual e desativar auto-scroll
@@ -223,7 +251,7 @@ class LogsScreen(ctk.CTkFrame):
             threading.Thread(target=auto_refresh_loop, daemon=True).start()
 
     def _refresh_logs(self):
-        """Atualiza os logs"""
+        """Atualiza os logs """
         try:
             self.status_label.configure(text="Solicitando logs...")
             self.refresh_btn.configure(state="disabled")
@@ -231,31 +259,59 @@ class LogsScreen(ctk.CTkFrame):
             app = self._get_app_instance()
             if hasattr(app, 'commands') and hasattr(app.commands, 'send_show_logs'):
                 app.commands.send_show_logs(
-                    lines=100,  # Mais linhas para a tela dedicada
+                    lines=50,
+                    log_type=self.log_type_var.get(),  
                     callback=self._on_logs_response
                 )
             else:
-                self.status_label.configure(text="Erro: Sistema de logs indisponível")
+                self.status_label.configure(text="Erro: Sistema de comandos indisponível")
+                self.refresh_btn.configure(state="normal")
                 
         except Exception as e:
             ui_logger.error(f"Erro ao solicitar logs: {e}")
             self.status_label.configure(text=f"Erro: {str(e)}")
-        finally:
-            self.after(1000, lambda: self.refresh_btn.configure(state="normal"))
+            self.refresh_btn.configure(state="normal")
 
     def _on_logs_response(self, success: bool, message: str, data: dict):
-        """Processa a resposta dos logs"""
+        """Processa a resposta dos logs - MAIS ROBUSTO"""
         try:
             if success:
-                logs_content = data.get('logs', message) if data else message
+                # Extrai logs de forma segura
+                logs_content = ""
+                source = "Sistema"
+                lines = 0
+                
+                if data and 'logs' in data:
+                    logs_content = data['logs']
+                    source = data.get('source', 'Sistema')
+                    lines = data.get('lines', 0)
+                elif data:
+                    # Tenta encontrar logs em outros campos
+                    for key, value in data.items():
+                        if isinstance(value, str) and len(value) > 100:  # Possível conteúdo de log
+                            logs_content = value
+                            break
+                    if not logs_content:
+                        logs_content = str(data)
+                else:
+                    logs_content = message
+                    
+                lines = len(logs_content.split('\n'))
+                
+                ui_logger.info(f"Logs recebidos: {lines} linhas")
                 self._update_logs_display(logs_content)
                 self.status_label.configure(text=f"Logs atualizados - {datetime.now().strftime('%H:%M:%S')}")
-            else:
-                self.status_label.configure(text=f"Erro ao obter logs: {message}")
                 
+            else:
+                ui_logger.error(f"Falha ao obter logs: {message}")
+                self.status_label.configure(text=f"Erro: {message}")
+                # Mostrar erro na área de logs
+                self._update_logs_display(f"ERRO AO OBTER LOGS:\n{message}")
+                    
         except Exception as e:
-            ui_logger.error(f"Erro no processamento de logs: {e}")
+            ui_logger.error(f"Erro no callback de logs: {e}")
             self.status_label.configure(text=f"Erro no processamento: {str(e)}")
+            self._update_logs_display(f"ERRO NO PROCESSAMENTO:\n{str(e)}")
 
     def _update_logs_display(self, logs_content: str):
         """Atualiza a exibição dos logs"""
